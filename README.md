@@ -12,12 +12,13 @@ loads a native engine library from `Application.onCreate` that **aborts the proc
 is not signed with the original certificate**. That makes a plain "patch and re-sign" impossible:
 the app dies a fraction of a second after launch, before it draws anything.
 
-These patches reproduce what the working 3.7 mod does, at the bytecode level:
+The bundle is a single patch, **Unlock premium**, which does what the working 3.7 mod does, at the
+bytecode level:
 
-1. **Unlock premium** – the licence policy is forced to always report the app as licensed.
-2. **Bypass native engine** – the `System.loadLibrary("d")` call in `App.onCreate` is
-   neutralised, so the integrity check that aborts the process never runs, and the methods that
-   library provided are stubbed so the app cannot die with `UnsatisfiedLinkError`.
+- the licence policy is forced to always report the app as licensed;
+- the `System.loadLibrary("d")` call in `App.onCreate` is neutralised, so the integrity check that
+  aborts the process never runs, and the methods that library provided are stubbed so the app
+  cannot die with `UnsatisfiedLinkError`.
 
 ### How to use these patches
 
@@ -72,6 +73,11 @@ APK that was already modded, its fingerprints will not match.
 - The native engine is not available, so features that depend on it do not work: the
   **Web Widget Overlay** and web style **button emulation**. Everything else (key remapping,
   ADB/Shizuku, macros, settings) behaves normally.
+  The engine library refuses to load on an APK that is not signed with the developer's
+  certificate, and that check runs in native code while the library loads - before any Java
+  exists - so a bytecode patch cannot reach it. Making those two features work would need the
+  library patched itself, or the original signature kept (root: install the original, then
+  replace the dex inside its APK under /data/app, or use a signature spoofing module).
 - Root is **not** required.
 - A restored backup can carry a trigger or mapping that runs **Stop recent apps**, which
   kills every app in the recents list over ADB - including tvQuickActions itself. On 3.8
