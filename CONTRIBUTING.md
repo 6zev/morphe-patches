@@ -13,3 +13,9 @@ Thanks for taking a look.
   the pull request which APK you tested and what the result was.
 - Patch code anchors on data that survives obfuscation (a preferences file name, an
   unobfuscated class). Avoid matching obfuscated class or method names: they change every release.
+
+## Releases
+
+`feat:` and `fix:` commits on `main` publish a release through `.github/workflows/release.yml`,
+which builds `patches-<version>.mpp` and attaches it to the GitHub release. Keep `dev` equal to
+`main` unless you are cutting prereleases, or the release job's backmerge step conflicts.
