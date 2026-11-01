@@ -15,8 +15,9 @@ the app dies a fraction of a second after launch, before it draws anything.
 These patches reproduce what the working 3.7 mod does, at the bytecode level:
 
 1. **Unlock premium** – the licence policy is forced to always report the app as licensed.
-2. **Skip native engine load** – the `System.loadLibrary("d")` call in `App.onCreate` is
-   neutralised, so the integrity check that aborts the process never runs.
+2. **Bypass native engine** – the `System.loadLibrary("d")` call in `App.onCreate` is
+   neutralised, so the integrity check that aborts the process never runs, and the methods that
+   library provided are stubbed so the app cannot die with `UnsatisfiedLinkError`.
 
 ### How to use these patches
 
@@ -72,6 +73,10 @@ APK that was already modded, its fingerprints will not match.
   **Web Widget Overlay** and web style **button emulation**. Everything else (key remapping,
   ADB/Shizuku, macros, settings) behaves normally.
 - Root is **not** required.
+- A restored backup can carry a trigger or mapping that runs **Stop recent apps**, which
+  kills every app in the recents list over ADB - including tvQuickActions itself. On 3.8
+  that makes the app restart every few seconds (`Force stopping dev.vodik7.tvquickactions`).
+  Remove that action from the trigger, or clear the app's data and set it up again.
 - If the app is updated, the patches may need adjustments: class and method names are obfuscated
   differently in every release. The patches anchor on data that does not change (the LVL
   preferences file name, the unobfuscated `App` class), which should keep them working across
