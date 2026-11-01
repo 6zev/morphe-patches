@@ -34,7 +34,7 @@ https://github.com/6zev/morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.0.1](https://github.com/6zev/morphe-patches/releases/tag/v1.0.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
+> **[v1.0.2](https://github.com/6zev/morphe-patches/releases/tag/v1.0.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
 <details open>
 <summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
 <br>
@@ -48,7 +48,7 @@ https://github.com/6zev/morphe-patches
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Skip native engine load](#skip-native-engine-load) | Neutralises the System.loadLibrary("d") call in App.onCreate. That library aborts the process when the APK is not signed with the original certificate, which is what makes every re-signed build crash on startup. The native engine becomes unavailable, so features that depend on it (web widget overlay, web style button emulation) stop working. |  |
+| [Bypass native engine](#bypass-native-engine) | Drops the System.loadLibrary("d") call in App.onCreate, whose library aborts the process when the APK is not signed with the original certificate, and stubs the engine methods that library provided so the app does not die with UnsatisfiedLinkError. Features that need the engine stay unavailable. |  |
 | [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. |  |
 
 </details>

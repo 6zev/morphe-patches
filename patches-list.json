@@ -1,10 +1,10 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "patches": [
     {
-      "name": "Skip native engine load",
-      "description": "Neutralises the System.loadLibrary(\"d\") call in App.onCreate. That library aborts the process when the APK is not signed with the original certificate, which is what makes every re-signed build crash on startup. The native engine becomes unavailable, so features that depend on it (web widget overlay, web style button emulation) stop working.",
+      "name": "Bypass native engine",
+      "description": "Drops the System.loadLibrary(\"d\") call in App.onCreate, whose library aborts the process when the APK is not signed with the original certificate, and stubs the engine methods that library provided so the app does not die with UnsatisfiedLinkError. Features that need the engine stay unavailable.",
       "default": true,
       "category": null,
       "compatiblePackages": [

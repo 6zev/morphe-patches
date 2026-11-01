@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/6zev/morphe-patches/compare/v1.0.1...v1.0.2) (2026-11-01)
+
+### 🐛 Bug Fixes
+
+* stub the native engine methods so the app no longer dies with UnsatisfiedLinkError ([a87caf2](https://github.com/6zev/morphe-patches/commit/a87caf2e5d77b7ad6a898ab6d7a7ee31cccfa45c))
+
 ## [1.0.1](https://github.com/6zev/morphe-patches/compare/v1.0.0...v1.0.1) (2026-11-01)
 
 ### 🐛 Bug Fixes

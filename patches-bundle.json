@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-01T13:08:28",
-  "description": "## [1.0.1](https://github.com/6zev/morphe-patches/compare/v1.0.0...v1.0.1) (2026-11-01)\n\n### 🐛 Bug Fixes\n\n* point metadata and links at the actual repository ([11c50a4](https://github.com/6zev/morphe-patches/commit/11c50a42c8f5e37aaaa1592b8a4124bc61ca3ef5))",
-  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.0.1/patches-1.0.1.mpp",
+  "created_at": "2026-11-01T13:52:45",
+  "description": "## [1.0.2](https://github.com/6zev/morphe-patches/compare/v1.0.1...v1.0.2) (2026-11-01)\n\n### 🐛 Bug Fixes\n\n* stub the native engine methods so the app no longer dies with UnsatisfiedLinkError ([a87caf2](https://github.com/6zev/morphe-patches/commit/a87caf2e5d77b7ad6a898ab6d7a7ee31cccfa45c))",
+  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.0.2/patches-1.0.2.mpp",
   "signature_download_url": "",
-  "version": "1.0.1"
+  "version": "1.0.2"
 }
