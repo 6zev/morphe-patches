@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/6zev/morphe-patches/compare/v1.0.0...v1.0.1) (2026-11-01)
+
+### 🐛 Bug Fixes
+
+* point metadata and links at the actual repository ([11c50a4](https://github.com/6zev/morphe-patches/commit/11c50a42c8f5e37aaaa1592b8a4124bc61ca3ef5))
+
 ## 1.0.0 (2026-11-01)
 
 ### ✨ New Features
