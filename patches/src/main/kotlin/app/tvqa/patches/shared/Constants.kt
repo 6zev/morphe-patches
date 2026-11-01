@@ -26,7 +26,7 @@ object Constants {
         // The original file is distributed as a plain APK, not as an APKM/XAPK bundle.
         apkFileType = ApkFileType.APK,
         // Background colour of the app icon, used by Morphe Manager.
-        appIconColor = 0xFF1565C0,
+        appIconColor = 0xFF1565C0.toInt(),
         targets = listOf(
             AppTarget(version = "3.8.0"),
             AppTarget(version = "3.7.0"),
