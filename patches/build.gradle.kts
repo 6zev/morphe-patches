@@ -5,7 +5,7 @@ patches {
     about {
         name = "tvQuickActions Patches"
         description = "Patches for tvQuickActions Pro (dev.vodik7.tvquickactions)."
-        source = "git@github.com:6zev/tvquickactions-morphe-patches.git"
+        source = "git@github.com:6zev/morphe-patches.git"
         author = "Zev"
         contact = "na"
         website = "na"

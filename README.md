@@ -23,10 +23,10 @@ These patches reproduce what the working 3.7 mod does, at the bytecode level:
 Add this repo URL in Morphe Manager → patch sources, then patch your own copy of the app:
 
 ```
-https://github.com/6zev/tvquickactions-morphe-patches
+https://github.com/6zev/morphe-patches
 ```
 
-<a href="https://morphe.software/add-source?github=6zev/tvquickactions-morphe-patches">
+<a href="https://morphe.software/add-source?github=6zev/morphe-patches">
   <img src=".github/assets/add-to-morphe.svg" alt="Add to Morphe" height="48">
 </a>
 
