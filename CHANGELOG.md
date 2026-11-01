@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/6zev/morphe-patches/compare/v1.0.2...v1.1.0) (2026-11-01)
+
+### ✨ New Features
+
+* merge the two patches into a single Unlock premium patch ([49a74ab](https://github.com/6zev/morphe-patches/commit/49a74ab4e55420b013ae874dd6b792f58ea61ee8))
+
 ## [1.0.2](https://github.com/6zev/morphe-patches/compare/v1.0.1...v1.0.2) (2026-11-01)
 
 ### 🐛 Bug Fixes

@@ -1,44 +1,10 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "patches": [
     {
-      "name": "Bypass native engine",
-      "description": "Drops the System.loadLibrary(\"d\") call in App.onCreate, whose library aborts the process when the APK is not signed with the original certificate, and stubs the engine methods that library provided so the app does not die with UnsatisfiedLinkError. Features that need the engine stay unavailable.",
-      "default": true,
-      "category": null,
-      "compatiblePackages": [
-        {
-          "packageName": "dev.vodik7.tvquickactions",
-          "name": "tvQuickActions Pro",
-          "description": null,
-          "apkFileType": "APK",
-          "appIconColor": "#1565C0",
-          "signatures": null,
-          "formFactor": "MOBILE",
-          "targets": [
-            {
-              "version": "3.8.0",
-              "versionCodes": null,
-              "isExperimental": false,
-              "minSdk": null,
-              "description": null
-            },
-            {
-              "version": "3.7.0",
-              "versionCodes": null,
-              "isExperimental": false,
-              "minSdk": null,
-              "description": null
-            }
-          ]
-        }
-      ],
-      "options": []
-    },
-    {
       "name": "Unlock premium",
-      "description": "Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features.",
+      "description": "Makes the bundled Google LVL policy always report the app as licensed, and bypasses the native engine: it drops the System.loadLibrary(\"d\") call whose library aborts the process on a re-signed APK, and stubs the methods that library provided so the app cannot die with UnsatisfiedLinkError. Features that need the engine stay unavailable.",
       "default": true,
       "category": null,
       "compatiblePackages": [

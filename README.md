@@ -35,9 +35,9 @@ https://github.com/6zev/morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.0.2](https://github.com/6zev/morphe-patches/releases/tag/v1.0.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
+> **[v1.1.0](https://github.com/6zev/morphe-patches/releases/tag/v1.1.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;1 patches total
 <details open>
-<summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
+<summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;1 patch</summary>
 <br>
 
 **Package name:** `dev.vodik7.tvquickactions`
@@ -49,8 +49,7 @@ https://github.com/6zev/morphe-patches
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Bypass native engine](#bypass-native-engine) | Drops the System.loadLibrary("d") call in App.onCreate, whose library aborts the process when the APK is not signed with the original certificate, and stubs the engine methods that library provided so the app does not die with UnsatisfiedLinkError. Features that need the engine stay unavailable. |  |
-| [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. |  |
+| [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, and bypasses the native engine: it drops the System.loadLibrary("d") call whose library aborts the process on a re-signed APK, and stubs the methods that library provided so the app cannot die with UnsatisfiedLinkError. Features that need the engine stay unavailable. |  |
 
 </details>
 
