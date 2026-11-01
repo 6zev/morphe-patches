@@ -33,13 +33,24 @@ https://github.com/6zev/tvquickactions-morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
+> **[v1.0.0](https://github.com/6zev/morphe-patches/releases/tag/v1.0.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
+<details open>
+<summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
+<br>
 
-| 💊 Patch | 📜 Description | ⚙️ Options | Default |
-|----------|----------------|-----------|---------|
-| Unlock premium | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. | none | ✅ |
-| Skip native engine load | Neutralises the `System.loadLibrary("d")` call in `App.onCreate`, so the native integrity check that aborts re-signed builds never runs. | none | ✅ |
+**Package name:** `dev.vodik7.tvquickactions`
 
-<!-- Do not modify this section by hand. The patch list is generated when release.yml creates a new release. -->
+**🎯 Supported versions:**
+
+| 3.8.0 | 3.7.0 |
+| :---: | :---: |
+
+| 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
+|----------|----------------|-----------|
+| [Skip native engine load](#skip-native-engine-load) | Neutralises the System.loadLibrary("d") call in App.onCreate. That library aborts the process when the APK is not signed with the original certificate, which is what makes every re-signed build crash on startup. The native engine becomes unavailable, so features that depend on it (web widget overlay, web style button emulation) stop working. |  |
+| [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. |  |
+
+</details>
 
 <!-- PATCHES_END -->
 

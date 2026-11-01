@@ -1,5 +1,74 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "0.0.0",
-  "patches": []
+  "version": "1.0.0",
+  "patches": [
+    {
+      "name": "Skip native engine load",
+      "description": "Neutralises the System.loadLibrary(\"d\") call in App.onCreate. That library aborts the process when the APK is not signed with the original certificate, which is what makes every re-signed build crash on startup. The native engine becomes unavailable, so features that depend on it (web widget overlay, web style button emulation) stop working.",
+      "default": true,
+      "category": null,
+      "compatiblePackages": [
+        {
+          "packageName": "dev.vodik7.tvquickactions",
+          "name": "tvQuickActions Pro",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#1565C0",
+          "signatures": null,
+          "formFactor": "MOBILE",
+          "targets": [
+            {
+              "version": "3.8.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            },
+            {
+              "version": "3.7.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Unlock premium",
+      "description": "Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features.",
+      "default": true,
+      "category": null,
+      "compatiblePackages": [
+        {
+          "packageName": "dev.vodik7.tvquickactions",
+          "name": "tvQuickActions Pro",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#1565C0",
+          "signatures": null,
+          "formFactor": "MOBILE",
+          "targets": [
+            {
+              "version": "3.8.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            },
+            {
+              "version": "3.7.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    }
+  ]
 }
