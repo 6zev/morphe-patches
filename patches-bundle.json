@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-02T03:52:57",
-  "description": "## [1.2.0](https://github.com/6zev/morphe-patches/compare/v1.1.0...v1.2.0) (2026-11-02)\n\n### ✨ New Features\n\n* patch the native engine library instead of dropping it ([3577807](https://github.com/6zev/morphe-patches/commit/35778076f22512249c76c0364432ac5b8ea643df)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)",
-  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.2.0/patches-1.2.0.mpp",
+  "created_at": "2026-11-02T04:37:30",
+  "description": "## [1.2.1](https://github.com/6zev/morphe-patches/compare/v1.2.0...v1.2.1) (2026-11-02)\n\n### 🐛 Bug Fixes\n\n* nop the trap instructions instead of replacing the whole routine ([dd444b2](https://github.com/6zev/morphe-patches/commit/dd444b21b9c41bf7c4ce148c57de122f66b5d106)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)",
+  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.2.1/patches-1.2.1.mpp",
   "signature_download_url": "",
-  "version": "1.2.0"
+  "version": "1.2.1"
 }

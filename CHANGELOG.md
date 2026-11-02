@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/6zev/morphe-patches/compare/v1.2.0...v1.2.1) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* nop the trap instructions instead of replacing the whole routine ([dd444b2](https://github.com/6zev/morphe-patches/commit/dd444b21b9c41bf7c4ce148c57de122f66b5d106)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)
+
 ## [1.2.0](https://github.com/6zev/morphe-patches/compare/v1.1.0...v1.2.0) (2026-11-02)
 
 ### ✨ New Features
