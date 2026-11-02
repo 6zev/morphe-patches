@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-02T21:51:36",
-  "description": "## [1.5.0](https://github.com/6zev/morphe-patches/compare/v1.4.2...v1.5.0) (2026-11-02)\n\n### ✨ New Features\n\n* drop self-stop commands in the ADB shell helper ([4f1a97b](https://github.com/6zev/morphe-patches/commit/4f1a97b3d3fe2e1b27348f692b0b1464a87f2a43))",
-  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.5.0/patches-1.5.0.mpp",
+  "created_at": "2026-11-02T22:34:03",
+  "description": "## [1.5.1](https://github.com/6zev/morphe-patches/compare/v1.5.0...v1.5.1) (2026-11-02)\n\n### 🐛 Bug Fixes\n\n* no-op the liba.so call that force-stops the app ([cfeb192](https://github.com/6zev/morphe-patches/commit/cfeb192d8ef6e27cab3d9963b852cde6c01f327e))",
+  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.5.1/patches-1.5.1.mpp",
   "signature_download_url": "",
-  "version": "1.5.0"
+  "version": "1.5.1"
 }

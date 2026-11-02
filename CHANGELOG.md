@@ -1,3 +1,9 @@
+## [1.5.1](https://github.com/6zev/morphe-patches/compare/v1.5.0...v1.5.1) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* no-op the liba.so call that force-stops the app ([cfeb192](https://github.com/6zev/morphe-patches/commit/cfeb192d8ef6e27cab3d9963b852cde6c01f327e))
+
 ## [1.5.0](https://github.com/6zev/morphe-patches/compare/v1.4.2...v1.5.0) (2026-11-02)
 
 ### ✨ New Features
