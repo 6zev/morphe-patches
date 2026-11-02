@@ -14,21 +14,22 @@ import java.io.File
 /**
  * One architecture's copy of the engine library, and what has to be changed in it.
  *
- * The library aborts the process on an APK that is not signed with the developer's certificate.
- * The abort comes from the library's own code, so the file is edited directly:
+ * The library kills the process on an APK that is not signed with the developer's certificate, in
+ * two ways:
  *
- * - On 64-bit ARM, constructor 2 of `INIT_ARRAY` destroys a global mutex, and every thread that
+ * - The first constructor the application declares destroys a global mutex, and every thread that
  *   locks that mutex afterwards dies with
- *   `FORTIFY: pthread_mutex_lock called on a destroyed mutex`. Index 1 of the same array guards
- *   itself with a variable it sets on its first run, so pointing index 2 at it makes that
- *   constructor a no-op while the other eleven keep initialising the engine.
- * - On both architectures, the verification routine is salted with traps that are meant to fire
- *   when the APK is not the developer's: `udf #0` (SIGILL) and stores of the marker `0xdead` to a
- *   null pointer (SIGSEGV). They sit inside the routine's own arithmetic, which continues on both
- *   sides of them, so each is replaced by a no-op and the routine keeps working.
+ *   `FORTIFY: pthread_mutex_lock called on a destroyed mutex`. `INIT_ARRAY` runs in order and the
+ *   constructor that follows it is the one calling the verification routine, so the two can be
+ *   told apart by that neighbour - and by being the two largest functions of the array.
+ * - The verification routine, which the library also runs periodically on a worker thread, is
+ *   salted with traps meant to fire on such an APK: `udf #0` (SIGILL), and stores of the markers
+ *   `0xdead` and `0xdeadbeef` (SIGSEGV) to a null pointer and to that marker as an address. A trap
+ *   sits inside the routine's own arithmetic, which carries on both sides of it, so replacing the
+ *   instruction with a no-op leaves the routine working.
  *
- * Replacing the whole routine with an early return was tried first and it hangs on Android TV 10:
- * the routine does more than verify, and the engine waits for what it sets up.
+ * Replacing the whole routine with an early return was tried first, and it hangs: the routine does
+ * more than verify.
  */
 private class LibraryPatch(
     val path: String,
@@ -38,43 +39,55 @@ private class LibraryPatch(
     val guardAddress: Long,
     val guardWidth: Int,
     val guardExpected: Long,
-    /** Constructor slot to redirect, as (address of the INIT_ARRAY slot, expected, replacement). */
+    /** Instruction rewrites: where, how wide, what is there now, what it becomes. */
+    val rewrites: List<Rewrite>,
+    /**
+     * The anti-tamper constructor, redirected by its `INIT_ARRAY` slot: the slot's address, the
+     * constructor it holds now, and the harmless one to point it at instead.
+     */
     val constructorSlot: Long? = null,
     val constructorExpected: Long? = null,
     val constructorReplacement: Long? = null,
-    val traps: List<Trap>,
 )
 
-/** An instruction to neutralise: where it is, what it is now, and what it becomes. */
-private class Trap(val address: Long, val expected: Long, val width: Int, val replacement: Long)
+private class Rewrite(val address: Long, val width: Int, val expected: Long, val replacement: Long)
 
 private const val NOP_64 = 0xD503201FL // nop
 private const val NOP_16 = 0x0000BF00L // nop.n
+private const val BX_LR_16 = 0x00004770L // bx lr
 
-/** 64-bit ARM. */
+/**
+ * 64-bit ARM.
+ *
+ * The anti-tamper constructor is `INIT_ARRAY[2]`; index 1 guards itself with a variable it sets on
+ * its first run, so pointing index 2 at it turns that constructor into a no-op while the other
+ * eleven keep initialising the engine.
+ */
 private val ARM64 = LibraryPatch(
     path = "lib/arm64-v8a/libd.so",
     machine = 0xB7,
     guardAddress = 0x6e2b80,
     guardWidth = 4,
     guardExpected = 0xA9BA7BFDL, // stp x29, x30, [sp, #-96]!
+    rewrites = listOf(
+        Rewrite(0x6e2e1c, 4, 0x00000000L, NOP_64), // udf #0
+        Rewrite(0x6e2e30, 4, 0x00000000L, NOP_64), // udf #0
+        Rewrite(0x6e30d0, 4, 0x39000109L, NOP_64), // strb w9, [x8], x8 = 0xdeadbeef
+        Rewrite(0x6e33f8, 4, 0xB900014BL, NOP_64), // str w11, [x10], x10 = 0
+        Rewrite(0x6e3414, 4, 0xB900014DL, NOP_64), // str w13, [x10], x10 = 0
+    ),
     constructorSlot = 0xbf96e8L + 8 * 2,
     constructorExpected = 0x68fb4cL,
     constructorReplacement = 0xb60cd8L,
-    traps = listOf(
-        Trap(0x6e2e1c, 0x00000000L, 4, NOP_64), // udf #0
-        Trap(0x6e2e30, 0x00000000L, 4, NOP_64), // udf #0
-        Trap(0x6e33f8, 0xB900014BL, 4, NOP_64), // str w11, [x10], where x10 was just zeroed
-        Trap(0x6e3414, 0xB900014DL, 4, NOP_64), // str w13, [x10], where x10 was just zeroed
-    ),
 )
 
 /**
  * 32-bit ARM, which is what Android TV 10 boxes commonly run.
  *
- * This build's verification routine carries a single trap. Its constructors were left alone: on
- * the 64-bit build the one that had to be disabled was found with a device tombstone, and there
- * is no equivalent evidence for this build yet.
+ * The same two functions have the same neighbours as on 64-bit ARM: `INIT_ARRAY[1]` is the
+ * constructor that calls the verification routine, and `INIT_ARRAY[0]` is the anti-tamper one -
+ * both times the two largest functions of the array. This one is not redirected at a replacement
+ * constructor but turned into `bx lr`, there being no guarded constructor to borrow here.
  */
 private val ARM32 = LibraryPatch(
     path = "lib/armeabi-v7a/libd.so",
@@ -82,16 +95,18 @@ private val ARM32 = LibraryPatch(
     guardAddress = 0x356ad8,
     guardWidth = 2,
     guardExpected = 0xB5F0L, // push {r4, r5, r6, r7, lr}
-    traps = listOf(
-        Trap(0x356fe8, 0x6001L, 2, NOP_16), // str r1, [r0], where r0 was just zeroed
+    rewrites = listOf(
+        Rewrite(0x304304, 2, 0xB5F0L, BX_LR_16), // the anti-tamper constructor -> return
+        Rewrite(0x356e14, 2, 0x7001L, NOP_16), // strb r1, [r0], r0 = 0xdeadbeef
+        Rewrite(0x356fe8, 2, 0x6001L, NOP_16), // str r1, [r0], r0 = 0
     ),
 )
 
 /**
- * The engine library refuses to run on an APK that is not signed with the developer's
- * certificate, which is what makes **Web Widget Overlay** and **button emulation** unusable: the
- * app dies as the library loads. Neither dropping the `System.loadLibrary("d")` call nor stubbing
- * the Java wrappers keeps the engine, because the abort comes from the library's own code.
+ * The engine library refuses to run on an APK that is not signed with the developer's certificate,
+ * which is what makes **Web Widget Overlay** and **button emulation** unusable: the app dies as
+ * the library loads. Neither dropping the `System.loadLibrary("d")` call nor stubbing the Java
+ * wrappers keeps the engine, because the abort comes from the library's own code.
  *
  * This patch edits the library itself, for both the 64-bit and the 32-bit ARM build, so the
  * engine loads and keeps working.
@@ -100,11 +115,11 @@ private val ARM32 = LibraryPatch(
 val nativeEnginePatch = resourcePatch(
     name = "Unlock native engine",
     description = "Patches the native engine library (libd.so) so that it loads on a re-signed " +
-            "APK. On 64-bit ARM the anti-tamper constructor that destroys a global mutex is made " +
-            "a no-op, and on both architectures the trap instructions the verification routine " +
-            "plants inside its own code - udf #0 (SIGILL) and stores of 0xdead to a null pointer " +
-            "(SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what " +
-            "makes Web Widget Overlay and button emulation work.",
+            "APK. The anti-tamper constructor that destroys a global mutex is disabled, and the " +
+            "trap instructions the verification routine plants inside its own code - udf #0 " +
+            "(SIGILL) and stores of the markers 0xdead and 0xdeadbeef (SIGSEGV) - are replaced " +
+            "by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay " +
+            "and button emulation work.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS_3_8)
@@ -153,51 +168,35 @@ private fun patchLibrary(lib: File, target: LibraryPatch) {
     }
 
     if (target.constructorSlot != null) {
-        redirectConstructor(data, segments, is64Bit, target)
+        redirectConstructor(data, segments, target)
     }
 
-    for (trap in target.traps) {
-        val offset = segments.offsetOf(trap.address)
-        val found = u(data, offset, trap.width)
+    for (rewrite in target.rewrites) {
+        val offset = segments.offsetOf(rewrite.address)
+        val found = u(data, offset, rewrite.width)
 
-        if (found != trap.expected) {
+        if (found != rewrite.expected) {
             throw PatchException(
-                "${target.path}: expected a trap at 0x${trap.address.toString(16)}, found " +
-                        "0x${found.toString(16)}. Patch tvQuickActions Pro 3.8.0."
+                "${target.path}: expected 0x${rewrite.expected.toString(16)} at " +
+                        "0x${rewrite.address.toString(16)}, found 0x${found.toString(16)}. " +
+                        "Patch tvQuickActions Pro 3.8.0."
             )
         }
 
-        w(data, offset, trap.width, trap.replacement)
+        w(data, offset, rewrite.width, rewrite.replacement)
     }
 
     lib.writeBytes(data)
 }
 
 /**
- * `INIT_ARRAY` is filled at load time from relocations, so a constructor is replaced by its
- * pointer: in a 64-bit library the pointer is a relocation addend, in a 32-bit one it already
- * sits in the table.
+ * A 64-bit `INIT_ARRAY` is filled at load time from R_AARCH64_RELATIVE relocations, so the
+ * constructor is replaced through the addend of the relocation that fills its slot.
  */
-private fun redirectConstructor(
-    data: ByteArray,
-    segments: List<Segment>,
-    is64Bit: Boolean,
-    target: LibraryPatch,
-) {
+private fun redirectConstructor(data: ByteArray, segments: List<Segment>, target: LibraryPatch) {
     val slot = target.constructorSlot!!
     val expected = target.constructorExpected!!
     val replacement = target.constructorReplacement!!
-
-    if (!is64Bit) {
-        val offset = segments.offsetOf(slot)
-
-        if (u(data, offset, 4) != expected) {
-            throw PatchException("${target.path}: INIT_ARRAY slot is not the expected constructor")
-        }
-
-        w(data, offset, 4, replacement)
-        return
-    }
 
     val dynamic = segments.firstOrNull { it.type == PT_DYNAMIC }
         ?: throw PatchException("${target.path} has no PT_DYNAMIC segment")
