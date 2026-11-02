@@ -110,30 +110,65 @@ private val ARM32 = LibraryPatch(
 )
 
 /**
+ * The second engine library, `liba.so`, which only the *server* process loads - the app process
+ * loads `libd.so`.
+ *
+ * It is the one that stops the app: a tenth of a second after the server announces
+ * `Calling main entry dev.vodik7.tvquickactions.server.Server`, a process forked from it calls
+ * `ActivityManager.forceStopPackage` on the app, which the system logs as
+ * `Force stopping dev.vodik7.tvquickactions ... from pid <server pid + ~18>`. The server then
+ * dies with the app, gets restarted, and the cycle repeats - which is why enabling any ADB
+ * speed-up mode (the only thing that starts the server) kills the app.
+ *
+ * The command is built inside the library, so nothing of it is visible in the dex, and the whole
+ * 32-bit library contains exactly one call to `system()` - in its `INIT_ARRAY[8]` constructor,
+ * which is where a load-time tamper check would run. That call is turned into two `nop`s. If it
+ * turns out to be something else, nothing is lost: it is still the only `system()` call the
+ * library makes.
+ *
+ * Only the 32-bit build is patched. Its `system()` call sites and `INIT_ARRAY` are laid out
+ * differently from the 64-bit build's, which has eight of them, so the 64-bit build needs its own
+ * investigation before it can be changed with the same confidence.
+ */
+private val ARM32_SUPPORT = LibraryPatch(
+    path = "lib/armeabi-v7a/liba.so",
+    machine = 0x28,
+    guardAddress = 0x430178,
+    guardWidth = 2,
+    guardExpected = 0xF2E5L, // first halfword of the `blx system` at 0x430178
+    rewrites = listOf(
+        Rewrite(0x430178, 2, 0xF2E5L, NOP_16), // blx system -> nop
+        Rewrite(0x43017A, 2, 0xE8F2L, NOP_16), // rest of the blx -> nop
+    ),
+)
+
+/**
  * The engine library refuses to run on an APK that is not signed with the developer's certificate,
  * which is what makes **Web Widget Overlay** and **button emulation** unusable: the app dies as
  * the library loads. Neither dropping the `System.loadLibrary("d")` call nor stubbing the Java
  * wrappers keeps the engine, because the abort comes from the library's own code.
  *
- * This patch edits the library itself, for both the 64-bit and the 32-bit ARM build, so the
+ * This patch edits the libraries themselves, for both the 64-bit and the 32-bit ARM build, so the
  * engine loads and keeps working.
  */
 @Suppress("unused")
 val nativeEnginePatch = resourcePatch(
     name = "Unlock native engine",
-    description = "Patches the native engine library (libd.so) so that it loads on a re-signed " +
-            "APK. The anti-tamper constructor that destroys a global mutex is disabled, and the " +
+    description = "Patches the native engine libraries so that they run on a re-signed APK. The " +
+            "anti-tamper constructor of libd.so that destroys a global mutex is disabled, and the " +
             "trap instructions the verification routine plants inside its own code - udf #0 " +
             "(SIGILL) and stores of the markers 0xdead and 0xdeadbeef (SIGSEGV) - are replaced " +
             "by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay " +
-            "and button emulation work.",
+            "and button emulation work. The only `system()` call of liba.so, which force-stops " +
+            "the app when the ADB speed-up server loads it, is turned into no-ops as well, which " +
+            "is what stops the app from killing itself in a loop.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS_3_8)
     dependsOn(unlockPremiumPatch)
 
     execute {
-        val patched = listOf(ARM64, ARM32).filter { target ->
+        val patched = listOf(ARM64, ARM32, ARM32_SUPPORT).filter { target ->
             val lib = get(target.path)
 
             if (lib.isFile) {
