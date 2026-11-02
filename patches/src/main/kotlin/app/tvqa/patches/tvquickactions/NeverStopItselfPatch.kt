@@ -22,9 +22,10 @@ private const val OWN_PACKAGE = "dev.vodik7.tvquickactions"
 private const val RUN_COMMAND = "$OWN_PACKAGE.RUN_COMMAND"
 
 /**
- * The start of every command that stops an app. The package is appended to it, so a command that
- * targets the app itself is matched by this prefix - whether it stops the app alone, or, as the
- * restart action does, follows the stop with a start.
+ * The part of every command that stops the app: `am force-stop` followed by the package. Every
+ * place that stops an app builds `am force-stop <package>`, so this substring identifies a command
+ * that targets the app itself - whether it stops the app alone, or, as the restart action does,
+ * follows the stop with a start.
  */
 private const val STOP_COMMAND = "am force-stop $OWN_PACKAGE"
 
@@ -32,7 +33,9 @@ private const val STOP_COMMAND = "am force-stop $OWN_PACKAGE"
 private const val STOP_RECENT_APPS = "$OWN_PACKAGE.STOP_RECENT_APPS"
 
 private const val ADB_SERVICE = "Ldev/vodik7/tvquickactions/services/AdbLibService;"
+private const val SHELL_HELPER = "Ldev/vodik7/tvquickactions/util/K;"
 private const val STRING = "Ljava/lang/String;"
+private const val STREAM = "LV3/j;"
 private const val RECENT_APPS_LIST = "Ljava/util/concurrent/CopyOnWriteArrayList;"
 
 /**
@@ -40,11 +43,15 @@ private const val RECENT_APPS_LIST = "Ljava/util/concurrent/CopyOnWriteArrayList
  * an ADB connection up - which is exactly what makes the command work at all - the action stops
  * the app that issued it: it restarts, the action runs again, and the app loops every few seconds.
  *
- * Two things are patched, because the app stops apps by two routes:
+ * Three things are patched, because the app stops apps by three routes:
  *
- * - Every route ends in `am force-stop <package>` handed to AdbLibService, which runs it over ADB.
- *   The command runner drops a command that stops the app's own package, so no action - Stop
- *   recent apps, Restart app, Force stop app, or a button mapped to one - can stop the app.
+ * - Every built-in route ends in `am force-stop <package>` handed to AdbLibService, which runs it
+ *   over ADB. The command runner drops a command that stops the app's own package, so no action -
+ *   Stop recent apps, Restart app, Force stop app, or a button mapped to one - can stop the app.
+ * - A custom "ADB command" action does not use AdbLibService: it goes through the shell helper
+ *   `util.K.K`, which talks to the ADB connection directly. That helper drops the same command,
+ *   and logs it, because an action can build the command from variables and only the resolved
+ *   string is known there.
  * - When ADB is not in use the same action instead calls `killBackgroundProcesses` for each app in
  *   the recents list. The app is taken out of that list as well.
  *
@@ -60,13 +67,15 @@ val neverStopItselfPatch = bytecodePatch(
             "the recents list it works from, so once an ADB connection is up the app stops " +
             "itself, restarts, and loops every few seconds. The app only skips the foreground " +
             "app, and only when the matching preference is enabled, so this covers what the " +
-            "preference does not.",
+            "preference does not. Custom ADB command actions are covered too, and such a " +
+            "command is logged under the TVQA-GUARD tag before it is dropped.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS)
 
     execute {
         blockOwnStopCommand()
+        blockOwnStopInShellHelpers()
         blockOwnPackageInRecentApps()
     }
 }
@@ -122,6 +131,80 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.blockOwnStopCommand() 
             if-eqz v0, :tvqa_run
             return-void
             :tvqa_run
+        """.trimIndent()
+    )
+}
+
+/**
+ * Drops a command that stops the app's own package in the shell helper the app uses for custom
+ * "ADB command" actions, and records it under the `TVQA-GUARD` tag.
+ *
+ * That helper (`util.K.K`) opens the ADB shell itself instead of handing the command to
+ * AdbLibService, so the guard there never sees such a command. It also runs after the app has
+ * substituted the `{...}` variables of the action, which is the only point at which the command
+ * that will run is known. `AdbLibService.t` is the same shell entry point for callers that use it
+ * directly, and is covered for the same reason.
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.blockOwnStopInShellHelpers() {
+    dropOwnStopCommands(
+        owner = SHELL_HELPER,
+        name = "K",
+        parameters = listOf("Landroid/content/Context;", STRING),
+        isStatic = true,
+        tag = "TVQA-GUARD/K.K",
+    )
+    dropOwnStopCommands(
+        owner = ADB_SERVICE,
+        name = "t",
+        parameters = listOf(STRING),
+        isStatic = false,
+        tag = "TVQA-GUARD/AdbLibService.t",
+    )
+}
+
+/**
+ * Prepends the guard to a method that turns a command into a shell stream: a command that names
+ * the app's own package after `am force-stop` is logged and answered with no stream, which every
+ * caller already treats as "the shell is not available".
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.dropOwnStopCommands(
+    owner: String,
+    name: String,
+    parameters: List<String>,
+    isStatic: Boolean,
+    tag: String,
+) {
+    val classDef = mutableClassDefBy(owner)
+    val method = classDef.methods.firstOrNull { method ->
+        method.name == name &&
+            method.returnType.toString() == STREAM &&
+            method.parameterTypes.map { it.toString() } == parameters
+    } ?: throw PatchException("Could not find $owner->$name")
+
+    val implementation = method.implementation
+        ?: throw PatchException("$owner->$name has no body")
+
+    // v0 is a local for both methods (the command is the last register, the parameters are at the
+    // top of the frame), and the body's first instruction overwrites it, so it is free to use.
+    val parameterCount = parameters.size + if (isStatic) 0 else 1
+    if (implementation.registerCount - parameterCount < 1) {
+        throw PatchException("$owner->$name has no local register to compare in")
+    }
+
+    val command = implementation.registerCount - 1
+
+    method.addInstructions(
+        0,
+        """
+            const-string v0, "$STOP_COMMAND"
+            invoke-virtual {v$command, v0}, Ljava/lang/String;->contains(Ljava/lang/CharSequence;)Z
+            move-result v0
+            if-eqz v0, :tvqa_guard
+            const-string v0, "$tag"
+            invoke-static {v0, v$command}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
+            const/4 v0, 0x0
+            return-object v0
+            :tvqa_guard
         """.trimIndent()
     )
 }
