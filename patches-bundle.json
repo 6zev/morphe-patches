@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-02T13:06:13",
-  "description": "## [1.4.2](https://github.com/6zev/morphe-patches/compare/v1.4.1...v1.4.2) (2026-11-02)\n\n### 🐛 Bug Fixes\n\n* the self-stop guard tested the branch the wrong way round ([107fea2](https://github.com/6zev/morphe-patches/commit/107fea26477184f3d809a630e30cd8cd990e32dd))",
-  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.4.2/patches-1.4.2.mpp",
+  "created_at": "2026-11-02T21:51:36",
+  "description": "## [1.5.0](https://github.com/6zev/morphe-patches/compare/v1.4.2...v1.5.0) (2026-11-02)\n\n### ✨ New Features\n\n* drop self-stop commands in the ADB shell helper ([4f1a97b](https://github.com/6zev/morphe-patches/commit/4f1a97b3d3fe2e1b27348f692b0b1464a87f2a43))",
+  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.5.0/patches-1.5.0.mpp",
   "signature_download_url": "",
-  "version": "1.4.2"
+  "version": "1.5.0"
 }

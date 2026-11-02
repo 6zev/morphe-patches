@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/6zev/morphe-patches/compare/v1.4.2...v1.5.0) (2026-11-02)
+
+### ✨ New Features
+
+* drop self-stop commands in the ADB shell helper ([4f1a97b](https://github.com/6zev/morphe-patches/commit/4f1a97b3d3fe2e1b27348f692b0b1464a87f2a43))
+
 ## [1.4.2](https://github.com/6zev/morphe-patches/compare/v1.4.1...v1.4.2) (2026-11-02)
 
 ### 🐛 Bug Fixes
