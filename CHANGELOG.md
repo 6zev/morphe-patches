@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/6zev/morphe-patches/compare/v1.1.0...v1.2.0) (2026-11-02)
+
+### ✨ New Features
+
+* patch the native engine library instead of dropping it ([3577807](https://github.com/6zev/morphe-patches/commit/35778076f22512249c76c0364432ac5b8ea643df)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)
+
 ## [1.1.0](https://github.com/6zev/morphe-patches/compare/v1.0.2...v1.1.0) (2026-11-01)
 
 ### ✨ New Features

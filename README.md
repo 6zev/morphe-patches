@@ -46,21 +46,22 @@ https://github.com/6zev/morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.1.0](https://github.com/6zev/morphe-patches/releases/tag/v1.1.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;1 patches total
+> **[v1.2.0](https://github.com/6zev/morphe-patches/releases/tag/v1.2.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
 <details open>
-<summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;1 patch</summary>
+<summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
 <br>
 
 **Package name:** `dev.vodik7.tvquickactions`
 
 **🎯 Supported versions:**
 
-| 3.8.0 | 3.7.0 |
-| :---: | :---: |
+| 3.8.0 |
+| :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, and bypasses the native engine: it drops the System.loadLibrary("d") call whose library aborts the process on a re-signed APK, and stubs the methods that library provided so the app cannot die with UnsatisfiedLinkError. Features that need the engine stay unavailable. |  |
+| [Unlock native engine](#unlock-native-engine) | Patches the native engine of the 64-bit ARM build (libd.so) so that it loads on a re-signed APK: the anti-tamper constructor that destroys a global mutex and the library's verification routine, whose failure paths are deliberate SIGILL and SIGSEGV instructions, are neutralised. This is what makes Web Widget Overlay and button emulation work. |  |
+| [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. |  |
 
 </details>
 
