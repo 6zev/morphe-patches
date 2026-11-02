@@ -119,7 +119,7 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.blockOwnStopCommand() 
             const-string v0, "$STOP_COMMAND"
             invoke-virtual {v$command, v0}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
             move-result v0
-            if-nez v0, :tvqa_run
+            if-eqz v0, :tvqa_run
             return-void
             :tvqa_run
         """.trimIndent()
