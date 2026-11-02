@@ -12,7 +12,7 @@ loads a native engine library from `Application.onCreate` that **aborts the proc
 is not signed with the original certificate**. That makes a plain "patch and re-sign" impossible:
 the app dies a fraction of a second after launch, before it draws anything.
 
-The bundle contains two patches:
+The bundle contains three patches:
 
 1. **Unlock premium** (bytecode) forces the licence policy to always report the app as licensed.
 2. **Unlock native engine** (native library) patches `libd.so` so that the library loads and keeps
@@ -30,6 +30,12 @@ The bundle contains two patches:
    them, which is why earlier releases of this bundle dropped the engine altogether.
 
 **Unlock native engine** depends on **Unlock premium**, so selecting the former runs both.
+
+3. **Never stop itself** (bytecode) removes the app from the list its own **Stop recent apps**
+   action kills. That action runs `am force-stop` over ADB for every app in the recents list, the
+   app included, so once an ADB connection is up the app stops *itself*, restarts, and loops every
+   few seconds. The app only skips the foreground app, and only when "Don't kill foreground app"
+   is enabled, so the patch covers what that preference does not.
 
 ### How to use these patches
 
@@ -94,8 +100,10 @@ APK that was already modded, its fingerprints will not match.
 - Root is **not** required.
 - A restored backup can carry a trigger or mapping that runs **Stop recent apps**, which
   kills every app in the recents list over ADB - including tvQuickActions itself. On 3.8
-  that makes the app restart every few seconds (`Force stopping dev.vodik7.tvquickactions`).
-  Remove that action from the trigger, or clear the app's data and set it up again.
+  that makes the app restart every few seconds (`Force stopping dev.vodik7.tvquickactions`),
+  and enabling ADB is what makes it start, because the kill needs the ADB connection.
+  **Never stop itself** takes the app out of that list, so the action is safe to keep; turning on
+  **Don't kill foreground app** in the app covers only the case where the app is in front.
 - If the app is updated, the patches may need adjustments: class and method names are obfuscated
   differently in every release. The patches anchor on data that does not change (the LVL
   preferences file name, the unobfuscated `App` class), which should keep them working across
@@ -126,8 +134,8 @@ patches/src/main/kotlin/app/tvqa/patches/
 ├── shared/Constants.kt                     # app compatibility (package, versions)
 └── tvquickactions/
     ├── UnlockPremiumPatch.kt               # licence policy -> allowAccess() = true
-    └── NativeEnginePatch.kt                # libd.so: neutralise the aborting constructor
-                                            # and the traps in its verification routine
+    ├── NativeEnginePatch.kt                # libd.so: the aborting constructor and the traps
+    └── NeverStopItselfPatch.kt             # Stop recent apps: skip the app's own package
 ```
 
 `NativeEnginePatch` is a resource patch. Morphe's patcher does not list native libraries as
