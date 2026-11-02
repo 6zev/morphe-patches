@@ -81,9 +81,11 @@ APK that was already modded, its fingerprints will not match.
 
 - Morphe signs the patched APK with its own key, so you must **uninstall the original app first**.
   App settings are lost unless the app ships its own backup/export.
-- The engine patch edits `libd.so` of the **64-bit ARM build** (`lib/arm64-v8a`) only. On an APK
-  that has no such library the patch stops with an error rather than touching anything.
-- The engine patch verifies the known layout of the library before it changes a byte, and refuses
+- The engine patch edits `libd.so` of the **ARM builds**, `lib/arm64-v8a` and `lib/armeabi-v7a`.
+  Android TV 10 boxes are often 32-bit and use the second one, so patch the APK on a device of
+  the same architecture as the one you install it on, and check the patched APK still contains
+  that `lib/<abi>/libd.so`.
+- The engine patch verifies the known layout of each library before it changes a byte, and refuses
   to patch a library that does not match, so it is limited to 3.8.0 instead of quietly damaging a
   future release. A future release will need its offsets re-derived.
 - Everything the app did before still works: key remapping, custom menus, macros, ADB/Shizuku,

@@ -11,207 +11,287 @@ import app.morphe.patcher.patch.resourcePatch
 import app.tvqa.patches.shared.Constants.TVQUICKACTIONS_3_8
 import java.io.File
 
-/** The native engine library of the 64-bit ARM build. */
-private const val LIBD_PATH = "lib/arm64-v8a/libd.so"
-
 /**
- * `INIT_ARRAY` of the library, and the two constructors that matter.
+ * One architecture's copy of the engine library, and what has to be changed in it.
  *
- * Index 2 (`0x68fb4c`) is an anti-tamper constructor: it destroys a global mutex, after which
- * any thread that locks that mutex dies with
- * `FORTIFY: pthread_mutex_lock called on a destroyed mutex`.
+ * The library aborts the process on an APK that is not signed with the developer's certificate.
+ * The abort comes from the library's own code, so the file is edited directly:
  *
- * Index 1 (`0xb60cd8`) guards itself behind a variable it sets on its first run, so calling it
- * again returns immediately. Pointing index 2 at it turns that constructor into a no-op while
- * leaving the other eleven constructors - and with them the engine's own initialisation - alone.
+ * - On 64-bit ARM, constructor 2 of `INIT_ARRAY` destroys a global mutex, and every thread that
+ *   locks that mutex afterwards dies with
+ *   `FORTIFY: pthread_mutex_lock called on a destroyed mutex`. Index 1 of the same array guards
+ *   itself with a variable it sets on its first run, so pointing index 2 at it makes that
+ *   constructor a no-op while the other eleven keep initialising the engine.
+ * - On both architectures, the verification routine is salted with traps that are meant to fire
+ *   when the APK is not the developer's: `udf #0` (SIGILL) and stores of the marker `0xdead` to a
+ *   null pointer (SIGSEGV). They sit inside the routine's own arithmetic, which continues on both
+ *   sides of them, so each is replaced by a no-op and the routine keeps working.
+ *
+ * Replacing the whole routine with an early return was tried first and it hangs on Android TV 10:
+ * the routine does more than verify, and the engine waits for what it sets up.
  */
-private const val INIT_ARRAY_VADDR = 0xbf96e8L
-private const val ANTI_TAMPER_CTOR = 0x68fb4cL
-private const val IDEMPOTENT_CTOR = 0xb60cd8L
-
-/**
- * The verification routine of the library, and the trap instructions planted inside it.
- *
- * A trap is a block that is entered, executes one deliberately illegal instruction, and whose
- * surrounding computation would have carried on regardless: the store that faults writes a
- * marker to a register that was just zeroed, and the registers the arithmetic needs are loaded
- * on both sides of it. Two traps are `udf #0` (SIGILL) and two write `0xdead` to a null pointer
- * (SIGSEGV). They are replaced by `nop`, which leaves the routine's own work intact.
- *
- * Replacing the whole routine with a `ret` was tried first and it hangs on Android TV 10: the
- * routine does more than verify, and the engine waits for what it sets up.
- */
-private const val CHECK_FUNCTION = 0x6e2b80L
-private const val CHECK_FUNCTION_PROLOGUE = 0xA9BA7BFDL // stp x29, x30, [sp, #-96]!
-private const val NOP = 0xD503201FL
-
-/** Each trap instruction, and the encoding expected at it. */
-private val TRAPS = listOf(
-    0x6e2e1cL to 0x00000000L, // udf #0
-    0x6e2e30L to 0x00000000L, // udf #0
-    0x6e33f8L to 0xB900014BL, // str w11, [x10], where x10 was just zeroed
-    0x6e3414L to 0xB900014DL, // str w13, [x10], where x10 was just zeroed
+private class LibraryPatch(
+    val path: String,
+    /** `e_machine` of the ELF file, which also tells the two formats apart. */
+    val machine: Long,
+    /** An instruction that identifies the build, checked but never changed. */
+    val guardAddress: Long,
+    val guardExpected: Long,
+    /** Constructor slot to redirect, as (address of the INIT_ARRAY slot, expected, replacement). */
+    val constructorSlot: Long? = null,
+    val constructorExpected: Long? = null,
+    val constructorReplacement: Long? = null,
+    val traps: List<Trap>,
 )
 
-// AArch64 ELF constants.
-private const val EM_AARCH64 = 0xB7L
-private const val PT_LOAD = 1L
-private const val PT_DYNAMIC = 2L
-private const val DT_RELA = 7L
-private const val DT_RELASZ = 8L
-private const val DT_RELAENT = 9L
-private const val DT_NULL = 0L
+/** An instruction to neutralise: where it is, what it is now, and what it becomes. */
+private class Trap(val address: Long, val expected: Long, val width: Int, val replacement: Long)
+
+private const val NOP_64 = 0xD503201FL // nop
+private const val NOP_16 = 0x0000BF00L // nop.n
+
+/** 64-bit ARM. */
+private val ARM64 = LibraryPatch(
+    path = "lib/arm64-v8a/libd.so",
+    machine = 0xB7,
+    guardAddress = 0x6e2b80,
+    guardExpected = 0xA9BA7BFDL, // stp x29, x30, [sp, #-96]!
+    constructorSlot = 0xbf96e8L + 8 * 2,
+    constructorExpected = 0x68fb4cL,
+    constructorReplacement = 0xb60cd8L,
+    traps = listOf(
+        Trap(0x6e2e1c, 0x00000000L, 4, NOP_64), // udf #0
+        Trap(0x6e2e30, 0x00000000L, 4, NOP_64), // udf #0
+        Trap(0x6e33f8, 0xB900014BL, 4, NOP_64), // str w11, [x10], where x10 was just zeroed
+        Trap(0x6e3414, 0xB900014DL, 4, NOP_64), // str w13, [x10], where x10 was just zeroed
+    ),
+)
 
 /**
- * The engine library (`libd.so`) aborts the process on an APK that is not signed with the
- * developer's certificate. That abort comes from the library's own constructors and from a
- * verification routine the engine runs periodically on a worker thread, so neither removing the
- * `System.loadLibrary("d")` call nor stubbing the Java wrappers can keep the engine working.
+ * 32-bit ARM, which is what Android TV 10 boxes commonly run.
  *
- * This patch edits the library itself, which then loads and keeps working, and that is what makes
- * **Web Widget Overlay** and **button emulation** available.
+ * This build's verification routine carries a single trap. Its constructors were left alone: on
+ * the 64-bit build the one that had to be disabled was found with a device tombstone, and there
+ * is no equivalent evidence for this build yet.
+ */
+private val ARM32 = LibraryPatch(
+    path = "lib/armeabi-v7a/libd.so",
+    machine = 0x28,
+    guardAddress = 0x356ad8,
+    guardExpected = 0xB5F0L, // push {r4, r5, r6, r7, lr}
+    traps = listOf(
+        Trap(0x356fe8, 0x6001L, 2, NOP_16), // str r1, [r0], where r0 was just zeroed
+    ),
+)
+
+/**
+ * The engine library refuses to run on an APK that is not signed with the developer's
+ * certificate, which is what makes **Web Widget Overlay** and **button emulation** unusable: the
+ * app dies as the library loads. Neither dropping the `System.loadLibrary("d")` call nor stubbing
+ * the Java wrappers keeps the engine, because the abort comes from the library's own code.
+ *
+ * This patch edits the library itself, for both the 64-bit and the 32-bit ARM build, so the
+ * engine loads and keeps working.
  */
 @Suppress("unused")
 val nativeEnginePatch = resourcePatch(
     name = "Unlock native engine",
-    description = "Patches the native engine of the 64-bit ARM build (libd.so) so that it loads " +
-            "on a re-signed APK: the anti-tamper constructor that destroys a global mutex is " +
-            "made a no-op, and the four trap instructions the library's verification routine " +
-            "plants inside its own code - two udf #0 (SIGILL) and two writes of 0xdead to a " +
-            "null pointer (SIGSEGV) - are replaced by nops, leaving the routine's work intact. " +
-            "This is what makes Web Widget Overlay and button emulation work.",
+    description = "Patches the native engine library (libd.so) so that it loads on a re-signed " +
+            "APK. On 64-bit ARM the anti-tamper constructor that destroys a global mutex is made " +
+            "a no-op, and on both architectures the trap instructions the verification routine " +
+            "plants inside its own code - udf #0 (SIGILL) and stores of 0xdead to a null pointer " +
+            "(SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what " +
+            "makes Web Widget Overlay and button emulation work.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS_3_8)
     dependsOn(unlockPremiumPatch)
 
     execute {
-        val lib = get(LIBD_PATH)
-        if (!lib.isFile) {
+        val patched = listOf(ARM64, ARM32).filter { target ->
+            val lib = get(target.path)
+
+            if (lib.isFile) {
+                patchLibrary(lib, target)
+                true
+            } else {
+                false
+            }
+        }
+
+        if (patched.isEmpty()) {
             throw PatchException(
-                "The APK has no $LIBD_PATH. This patch supports the 64-bit ARM build only."
+                "The APK has neither lib/arm64-v8a/libd.so nor lib/armeabi-v7a/libd.so. " +
+                        "This patch supports the ARM builds only."
             )
         }
-
-        patchLibd(lib)
     }
 }
 
-private fun patchLibd(lib: File) {
+private fun patchLibrary(lib: File, target: LibraryPatch) {
     val data = lib.readBytes()
+    val is64Bit = elfIs64Bit(data, lib.name)
+    val segments = segments(data, is64Bit)
 
-    if (data.size < 64 ||
-        data[0] != 0x7F.toByte() || data[1] != 'E'.code.toByte() ||
-        data[2] != 'L'.code.toByte() || data[3] != 'F'.code.toByte()
-    ) {
-        throw PatchException("${lib.name} is not an ELF file")
-    }
-    if (data[4].toInt() != 2 || data[5].toInt() != 1) {
-        throw PatchException("${lib.name} is not a 64-bit little-endian ELF file")
-    }
-    if (u16(data, 0x12) != EM_AARCH64) {
-        throw PatchException("${lib.name} is not an AArch64 library")
-    }
-
-    val segments = programHeaders(data)
-    neutraliseAntiTamperConstructor(data, segments)
-    neutraliseTraps(data, segments)
-
-    lib.writeBytes(data)
-}
-
-private fun neutraliseAntiTamperConstructor(data: ByteArray, segments: List<Segment>) {
-    val dynamic = segments.firstOrNull { it.type == PT_DYNAMIC }
-        ?: throw PatchException("The library has no PT_DYNAMIC segment")
-
-    var rela = -1L
-    var relaSize = 0L
-    var relaEntrySize = 24L
-    var initArray = -1L
-
-    var offset = dynamic.offset.toInt()
-    val end = offset + dynamic.fileSize.toInt()
-    while (offset < end) {
-        val tag = u64(data, offset)
-        if (tag == DT_NULL) break
-
-        val value = u64(data, offset + 8)
-        when (tag) {
-            DT_RELA -> rela = value
-            DT_RELASZ -> relaSize = value
-            DT_RELAENT -> relaEntrySize = value
-            25L -> initArray = value
-        }
-        offset += 16
-    }
-
-    if (initArray != INIT_ARRAY_VADDR || rela < 0 || relaSize <= 0) {
+    if (target.machine != u16(data, 0x12)) {
         throw PatchException(
-            "This is not the libd.so this patch was written for. " +
+            "${target.path}: expected a 0x${target.machine.toString(16)} ELF, found " +
+                    "0x${u16(data, 0x12).toString(16)}. Patch tvQuickActions Pro 3.8.0."
+        )
+    }
+
+    // The build is identified by one instruction of the verification routine, which is never
+    // changed. A library that does not match is refused rather than corrupted.
+    if (u(data, segments.offsetOf(target.guardAddress), 2) != target.guardExpected) {
+        throw PatchException(
+            "${target.path} is not the library this patch was written for. " +
                     "Patch tvQuickActions Pro 3.8.0."
         )
     }
 
-    // INIT_ARRAY is filled by R_AARCH64_RELATIVE relocations, so its slot for the anti-tamper
-    // constructor is found by its address and rewritten by its addend.
-    val slot = initArray + 8 * 2
-    var found = false
+    if (target.constructorSlot != null) {
+        redirectConstructor(data, segments, is64Bit, target)
+    }
 
+    for (trap in target.traps) {
+        val offset = segments.offsetOf(trap.address)
+        val found = u(data, offset, trap.width)
+
+        if (found != trap.expected) {
+            throw PatchException(
+                "${target.path}: expected a trap at 0x${trap.address.toString(16)}, found " +
+                        "0x${found.toString(16)}. Patch tvQuickActions Pro 3.8.0."
+            )
+        }
+
+        w(data, offset, trap.width, trap.replacement)
+    }
+
+    lib.writeBytes(data)
+}
+
+/**
+ * `INIT_ARRAY` is filled at load time from relocations, so a constructor is replaced by its
+ * pointer: in a 64-bit library the pointer is a relocation addend, in a 32-bit one it already
+ * sits in the table.
+ */
+private fun redirectConstructor(
+    data: ByteArray,
+    segments: List<Segment>,
+    is64Bit: Boolean,
+    target: LibraryPatch,
+) {
+    val slot = target.constructorSlot!!
+    val expected = target.constructorExpected!!
+    val replacement = target.constructorReplacement!!
+
+    if (!is64Bit) {
+        val offset = segments.offsetOf(slot)
+
+        if (u(data, offset, 4) != expected) {
+            throw PatchException("${target.path}: INIT_ARRAY slot is not the expected constructor")
+        }
+
+        w(data, offset, 4, replacement)
+        return
+    }
+
+    val dynamic = segments.firstOrNull { it.type == PT_DYNAMIC }
+        ?: throw PatchException("${target.path} has no PT_DYNAMIC segment")
+
+    var rela = -1L
+    var relaSize = 0L
+    var relaEntrySize = 24L
+
+    var offset = dynamic.offset.toInt()
+    val end = offset + dynamic.fileSize.toInt()
+    while (offset < end) {
+        val tag = u(data, offset, 8)
+        if (tag == DT_NULL) break
+
+        val value = u(data, offset + 8, 8)
+        when (tag) {
+            DT_RELA -> rela = value
+            DT_RELASZ -> relaSize = value
+            DT_RELAENT -> relaEntrySize = value
+        }
+        offset += 16
+    }
+
+    if (rela < 0 || relaSize <= 0) {
+        throw PatchException("${target.path} has no relocation table")
+    }
+
+    var found = false
     var entry = rela
     while (entry < rela + relaSize) {
-        if (u64(data, entry.toInt()) == slot) {
+        if (u(data, entry.toInt(), 8) == slot) {
             val addendOffset = (entry + 16).toInt()
-            if (u64(data, addendOffset) != ANTI_TAMPER_CTOR) {
-                throw PatchException("${LIBD_PATH}: INIT_ARRAY[2] is not the expected constructor")
+
+            if (u(data, addendOffset, 8) != expected) {
+                throw PatchException("${target.path}: INIT_ARRAY slot is not the expected constructor")
             }
-            w64(data, addendOffset, IDEMPOTENT_CTOR)
+
+            w(data, addendOffset, 8, replacement)
             found = true
         }
         entry += relaEntrySize
     }
 
-    if (!found) throw PatchException("${LIBD_PATH}: could not find the anti-tamper constructor")
-}
-
-private fun neutraliseTraps(data: ByteArray, segments: List<Segment>) {
-    // Only the verification routine carries traps, so its prologue identifies the build. It is
-    // checked but left alone.
-    if (u32(data, segments.offsetOf(CHECK_FUNCTION)) != CHECK_FUNCTION_PROLOGUE) {
-        throw PatchException(
-            "This is not the libd.so this patch was written for. " +
-                    "Patch tvQuickActions Pro 3.8.0."
-        )
-    }
-
-    for ((vaddr, expected) in TRAPS) {
-        val offset = segments.offsetOf(vaddr)
-
-        if (u32(data, offset) != expected) {
-            throw PatchException(
-                "${LIBD_PATH}: expected a trap at 0x${vaddr.toString(16)}, found " +
-                        "0x${u32(data, offset).toString(16)}. Patch tvQuickActions Pro 3.8.0."
-            )
-        }
-
-        w32(data, offset, NOP)
-    }
+    if (!found) throw PatchException("${target.path}: could not find the constructor slot")
 }
 
 private class Segment(val type: Long, val offset: Long, val vaddr: Long, val fileSize: Long)
 
-private fun programHeaders(data: ByteArray): List<Segment> {
-    val headerOffset = u64(data, 0x20)
-    val headerSize = u16(data, 0x36)
-    val headerCount = u16(data, 0x38)
+private fun elfIs64Bit(data: ByteArray, name: String): Boolean {
+    if (data.size < 64 ||
+        data[0] != 0x7F.toByte() || data[1] != 'E'.code.toByte() ||
+        data[2] != 'L'.code.toByte() || data[3] != 'F'.code.toByte()
+    ) {
+        throw PatchException("$name is not an ELF file")
+    }
+    if (data[5].toInt() != 1) throw PatchException("$name is not little-endian")
+
+    return when (data[4].toInt()) {
+        1 -> false
+        2 -> true
+        else -> throw PatchException("$name is neither a 32-bit nor a 64-bit ELF file")
+    }
+}
+
+private fun segments(data: ByteArray, is64Bit: Boolean): List<Segment> {
+    val headerOffset: Long
+    val headerSize: Long
+    val headerCount: Long
+
+    if (is64Bit) {
+        headerOffset = u(data, 0x20, 8)
+        headerSize = u(data, 0x36, 2)
+        headerCount = u(data, 0x38, 2)
+    } else {
+        headerOffset = u(data, 0x1C, 4)
+        headerSize = u(data, 0x2A, 2)
+        headerCount = u(data, 0x2C, 2)
+    }
 
     return (0 until headerCount).map { index ->
         val offset = (headerOffset + index * headerSize).toInt()
-        Segment(
-            type = u32(data, offset),
-            offset = u64(data, offset + 8),
-            vaddr = u64(data, offset + 16),
-            fileSize = u64(data, offset + 32),
-        )
+
+        if (is64Bit) {
+            Segment(
+                type = u(data, offset, 4),
+                offset = u(data, offset + 8, 8),
+                vaddr = u(data, offset + 16, 8),
+                fileSize = u(data, offset + 32, 8),
+            )
+        } else {
+            Segment(
+                type = u(data, offset, 4),
+                offset = u(data, offset + 4, 4),
+                vaddr = u(data, offset + 8, 4),
+                fileSize = u(data, offset + 16, 4),
+            )
+        }
     }
 }
 
@@ -222,23 +302,28 @@ private fun List<Segment>.offsetOf(vaddr: Long): Int {
     return (segment.offset + (vaddr - segment.vaddr)).toInt()
 }
 
-private fun u16(data: ByteArray, offset: Int): Long =
-    (data[offset].toLong() and 0xFF) or ((data[offset + 1].toLong() and 0xFF) shl 8)
+private fun u(data: ByteArray, offset: Int, width: Int): Long {
+    var value = 0L
 
-private fun u32(data: ByteArray, offset: Int): Long =
-    u16(data, offset) or (u16(data, offset + 2) shl 16)
+    for (byte in 0 until width) {
+        value = value or ((data[offset + byte].toLong() and 0xFF) shl (8 * byte))
+    }
 
-private fun u64(data: ByteArray, offset: Int): Long =
-    u32(data, offset) or (u32(data, offset + 4) shl 32)
-
-private fun w32(data: ByteArray, offset: Int, value: Long) {
-    data[offset] = (value and 0xFF).toByte()
-    data[offset + 1] = ((value shr 8) and 0xFF).toByte()
-    data[offset + 2] = ((value shr 16) and 0xFF).toByte()
-    data[offset + 3] = ((value shr 24) and 0xFF).toByte()
+    return value
 }
 
-private fun w64(data: ByteArray, offset: Int, value: Long) {
-    w32(data, offset, value and 0xFFFFFFFFL)
-    w32(data, offset + 4, (value ushr 32) and 0xFFFFFFFFL)
+private fun w(data: ByteArray, offset: Int, width: Int, value: Long) {
+    for (byte in 0 until width) {
+        data[offset + byte] = ((value shr (8 * byte)) and 0xFF).toByte()
+    }
 }
+
+private fun u16(data: ByteArray, offset: Int) = u(data, offset, 2)
+
+// ELF constants.
+private const val PT_LOAD = 1L
+private const val PT_DYNAMIC = 2L
+private const val DT_NULL = 0L
+private const val DT_RELA = 7L
+private const val DT_RELASZ = 8L
+private const val DT_RELAENT = 9L
