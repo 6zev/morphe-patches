@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/6zev/morphe-patches/compare/v1.3.3...v1.4.0) (2026-11-02)
+
+### ✨ New Features
+
+* keep the app out of its own Stop recent apps list ([f483382](https://github.com/6zev/morphe-patches/commit/f483382fc68dd6bda2bee0ca1c23406a76087f1d))
+
 ## [1.3.3](https://github.com/6zev/morphe-patches/compare/v1.3.2...v1.3.3) (2026-11-02)
 
 ### 🐛 Bug Fixes

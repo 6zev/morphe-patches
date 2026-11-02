@@ -1,7 +1,41 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "patches": [
+    {
+      "name": "Never stop itself",
+      "description": "Keeps the app out of the list its own Stop recent apps action kills. Without it, that action - and any trigger or button mapping that runs it - stops the app itself over ADB, which makes the app restart in a loop every few seconds. The app only skips the foreground app, and only when the matching preference is enabled, so this covers the case the preference does not.",
+      "default": true,
+      "category": null,
+      "compatiblePackages": [
+        {
+          "packageName": "dev.vodik7.tvquickactions",
+          "name": "tvQuickActions Pro",
+          "description": null,
+          "apkFileType": "APK",
+          "appIconColor": "#1565C0",
+          "signatures": null,
+          "formFactor": "MOBILE",
+          "targets": [
+            {
+              "version": "3.8.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            },
+            {
+              "version": "3.7.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
     {
       "name": "Unlock native engine",
       "description": "Patches the native engine library (libd.so) so that it loads on a re-signed APK. The anti-tamper constructor that destroys a global mutex is disabled, and the trap instructions the verification routine plants inside its own code - udf #0 (SIGILL) and stores of the markers 0xdead and 0xdeadbeef (SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay and button emulation work.",
