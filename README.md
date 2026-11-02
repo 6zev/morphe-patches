@@ -12,13 +12,24 @@ loads a native engine library from `Application.onCreate` that **aborts the proc
 is not signed with the original certificate**. That makes a plain "patch and re-sign" impossible:
 the app dies a fraction of a second after launch, before it draws anything.
 
-The bundle is a single patch, **Unlock premium**, which does what the working 3.7 mod does, at the
-bytecode level:
+The bundle contains two patches:
 
-- the licence policy is forced to always report the app as licensed;
-- the `System.loadLibrary("d")` call in `App.onCreate` is neutralised, so the integrity check that
-  aborts the process never runs, and the methods that library provided are stubbed so the app
-  cannot die with `UnsatisfiedLinkError`.
+1. **Unlock premium** (bytecode) forces the licence policy to always report the app as licensed.
+2. **Unlock native engine** (native library) patches `libd.so` so that the library loads and keeps
+   working on a re-signed APK. It edits the library's own code, because that is where the abort
+   comes from:
+   - constructor 2 of the library's `INIT_ARRAY` destroys a global mutex, and every thread that
+     locks that mutex afterwards dies with
+     `FORTIFY: pthread_mutex_lock called on a destroyed mutex`;
+   - the library's verification routine, which it runs at load time *and* periodically on one of
+     its own worker threads, has failure paths built from deliberate `udf #0` (SIGILL) and writes
+     of `0xdead` to a null pointer (SIGSEGV).
+
+   Both are neutralised in place, which leaves the engine's own initialisation intact. This is what
+   makes **Web Widget Overlay** and **button emulation** work; a bytecode-only patch cannot reach
+   them, which is why earlier releases of this bundle dropped the engine altogether.
+
+**Unlock native engine** depends on **Unlock premium**, so selecting the former runs both.
 
 ### How to use these patches
 
@@ -59,8 +70,8 @@ https://github.com/6zev/morphe-patches
 
 | App version | Status |
 |---|---|
-| 3.8.0 | ✅ developed and tested against this release |
-| 3.7.0 | ⚠️ expected to work (same licence policy, no engine load at all) |
+| 3.8.0 | ✅ developed and tested against this release; both patches apply |
+| 3.7.0 | ⚠️ licence patch only — that release does not load the engine |
 
 Get the **original, unmodified APK** (ApkMirror, UpToDown or the Play Store) — do not patch an
 APK that was already modded, its fingerprints will not match.
@@ -69,14 +80,14 @@ APK that was already modded, its fingerprints will not match.
 
 - Morphe signs the patched APK with its own key, so you must **uninstall the original app first**.
   App settings are lost unless the app ships its own backup/export.
-- The native engine is not available, so features that depend on it do not work: the
-  **Web Widget Overlay** and web style **button emulation**. Everything else (key remapping,
-  ADB/Shizuku, macros, settings) behaves normally.
-  The engine library refuses to load on an APK that is not signed with the developer's
-  certificate, and that check runs in native code while the library loads - before any Java
-  exists - so a bytecode patch cannot reach it. Making those two features work would need the
-  library patched itself, or the original signature kept (root: install the original, then
-  replace the dex inside its APK under /data/app, or use a signature spoofing module).
+- The engine patch edits `libd.so` of the **64-bit ARM build** (`lib/arm64-v8a`) only. On an APK
+  that has no such library the patch stops with an error rather than touching anything.
+- The engine patch verifies the known layout of the library before it changes a byte, and refuses
+  to patch a library that does not match, so it is limited to 3.8.0 instead of quietly damaging a
+  future release. A future release will need its offsets re-derived.
+- Everything the app did before still works: key remapping, custom menus, macros, ADB/Shizuku,
+  cloud/NAS sources, settings, premium — now including **Web Widget Overlay** and
+  **button emulation**.
 - Root is **not** required.
 - A restored backup can carry a trigger or mapping that runs **Stop recent apps**, which
   kills every app in the recents list over ADB - including tvQuickActions itself. On 3.8
@@ -111,12 +122,14 @@ java -jar morphe-desktop-*-all.jar patch -p patches-*.mpp tvquickactions.apk
 patches/src/main/kotlin/app/tvqa/patches/
 ├── shared/Constants.kt                     # app compatibility (package, versions)
 └── tvquickactions/
-    ├── Fingerprints.kt                     # App.onCreate / System.loadLibrary
     ├── UnlockPremiumPatch.kt               # licence policy -> allowAccess() = true
-    └── SkipNativeEngineLoadPatch.kt        # drop the native engine load
+    └── NativeEnginePatch.kt                # libd.so: neutralise the aborting constructor
+                                            # and the library's verification routine
 ```
 
-The extension module is unused: both patches are pure bytecode patches.
+`NativeEnginePatch` is a resource patch. Morphe's patcher does not list native libraries as
+decodable files, but it extracts one on request and writes it back into the APK, which is what the
+patch relies on.
 
 ## 📜 License
 
