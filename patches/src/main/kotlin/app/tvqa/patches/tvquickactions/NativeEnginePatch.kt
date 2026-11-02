@@ -36,6 +36,7 @@ private class LibraryPatch(
     val machine: Long,
     /** An instruction that identifies the build, checked but never changed. */
     val guardAddress: Long,
+    val guardWidth: Int,
     val guardExpected: Long,
     /** Constructor slot to redirect, as (address of the INIT_ARRAY slot, expected, replacement). */
     val constructorSlot: Long? = null,
@@ -55,6 +56,7 @@ private val ARM64 = LibraryPatch(
     path = "lib/arm64-v8a/libd.so",
     machine = 0xB7,
     guardAddress = 0x6e2b80,
+    guardWidth = 4,
     guardExpected = 0xA9BA7BFDL, // stp x29, x30, [sp, #-96]!
     constructorSlot = 0xbf96e8L + 8 * 2,
     constructorExpected = 0x68fb4cL,
@@ -78,6 +80,7 @@ private val ARM32 = LibraryPatch(
     path = "lib/armeabi-v7a/libd.so",
     machine = 0x28,
     guardAddress = 0x356ad8,
+    guardWidth = 2,
     guardExpected = 0xB5F0L, // push {r4, r5, r6, r7, lr}
     traps = listOf(
         Trap(0x356fe8, 0x6001L, 2, NOP_16), // str r1, [r0], where r0 was just zeroed
@@ -142,7 +145,7 @@ private fun patchLibrary(lib: File, target: LibraryPatch) {
 
     // The build is identified by one instruction of the verification routine, which is never
     // changed. A library that does not match is refused rather than corrupted.
-    if (u(data, segments.offsetOf(target.guardAddress), 2) != target.guardExpected) {
+    if (u(data, segments.offsetOf(target.guardAddress), target.guardWidth) != target.guardExpected) {
         throw PatchException(
             "${target.path} is not the library this patch was written for. " +
                     "Patch tvQuickActions Pro 3.8.0."
