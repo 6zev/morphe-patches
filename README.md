@@ -125,7 +125,7 @@ patches/src/main/kotlin/app/tvqa/patches/
 └── tvquickactions/
     ├── UnlockPremiumPatch.kt               # licence policy -> allowAccess() = true
     └── NativeEnginePatch.kt                # libd.so: neutralise the aborting constructor
-                                            # and the library's verification routine
+                                            # and the traps in its verification routine
 ```
 
 `NativeEnginePatch` is a resource patch. Morphe's patcher does not list native libraries as

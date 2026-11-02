@@ -30,18 +30,28 @@ private const val ANTI_TAMPER_CTOR = 0x68fb4cL
 private const val IDEMPOTENT_CTOR = 0xb60cd8L
 
 /**
- * The verification routine of the library, and the two instructions that open it.
+ * The verification routine of the library, and the trap instructions planted inside it.
  *
- * Its failure paths are a minefield: two `udf #0` (SIGILL) and two deliberate writes of `0xdead`
- * to a null pointer (SIGSEGV). It is reached from four direct call sites and from eight entries
- * of function-pointer tables, and every caller ignores its return value, so the function as a
- * whole is replaced by one that returns 0.
+ * A trap is a block that is entered, executes one deliberately illegal instruction, and whose
+ * surrounding computation would have carried on regardless: the store that faults writes a
+ * marker to a register that was just zeroed, and the registers the arithmetic needs are loaded
+ * on both sides of it. Two traps are `udf #0` (SIGILL) and two write `0xdead` to a null pointer
+ * (SIGSEGV). They are replaced by `nop`, which leaves the routine's own work intact.
+ *
+ * Replacing the whole routine with a `ret` was tried first and it hangs on Android TV 10: the
+ * routine does more than verify, and the engine waits for what it sets up.
  */
 private const val CHECK_FUNCTION = 0x6e2b80L
 private const val CHECK_FUNCTION_PROLOGUE = 0xA9BA7BFDL // stp x29, x30, [sp, #-96]!
-private const val CHECK_FUNCTION_SECOND = 0xA9016FFCL // stp x28, x27, [sp, #16]
-private const val MOV_W0_ZERO = 0x2A1F03E0L // mov w0, wzr
-private const val RET = 0xD65F03C0L // ret
+private const val NOP = 0xD503201FL
+
+/** Each trap instruction, and the encoding expected at it. */
+private val TRAPS = listOf(
+    0x6e2e1cL to 0x00000000L, // udf #0
+    0x6e2e30L to 0x00000000L, // udf #0
+    0x6e33f8L to 0xB900014BL, // str w11, [x10], where x10 was just zeroed
+    0x6e3414L to 0xB900014DL, // str w13, [x10], where x10 was just zeroed
+)
 
 // AArch64 ELF constants.
 private const val EM_AARCH64 = 0xB7L
@@ -65,10 +75,11 @@ private const val DT_NULL = 0L
 val nativeEnginePatch = resourcePatch(
     name = "Unlock native engine",
     description = "Patches the native engine of the 64-bit ARM build (libd.so) so that it loads " +
-            "on a re-signed APK: the anti-tamper constructor that destroys a global mutex and " +
-            "the library's verification routine, whose failure paths are deliberate SIGILL and " +
-            "SIGSEGV instructions, are neutralised. This is what makes Web Widget Overlay and " +
-            "button emulation work.",
+            "on a re-signed APK: the anti-tamper constructor that destroys a global mutex is " +
+            "made a no-op, and the four trap instructions the library's verification routine " +
+            "plants inside its own code - two udf #0 (SIGILL) and two writes of 0xdead to a " +
+            "null pointer (SIGSEGV) - are replaced by nops, leaving the routine's work intact. " +
+            "This is what makes Web Widget Overlay and button emulation work.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS_3_8)
@@ -104,7 +115,7 @@ private fun patchLibd(lib: File) {
 
     val segments = programHeaders(data)
     neutraliseAntiTamperConstructor(data, segments)
-    neutraliseCheckFunction(data, segments)
+    neutraliseTraps(data, segments)
 
     lib.writeBytes(data)
 }
@@ -162,20 +173,28 @@ private fun neutraliseAntiTamperConstructor(data: ByteArray, segments: List<Segm
     if (!found) throw PatchException("${LIBD_PATH}: could not find the anti-tamper constructor")
 }
 
-private fun neutraliseCheckFunction(data: ByteArray, segments: List<Segment>) {
-    val offset = segments.offsetOf(CHECK_FUNCTION)
-
-    if (u32(data, offset) != CHECK_FUNCTION_PROLOGUE ||
-        u32(data, offset + 4) != CHECK_FUNCTION_SECOND
-    ) {
+private fun neutraliseTraps(data: ByteArray, segments: List<Segment>) {
+    // Only the verification routine carries traps, so its prologue identifies the build. It is
+    // checked but left alone.
+    if (u32(data, segments.offsetOf(CHECK_FUNCTION)) != CHECK_FUNCTION_PROLOGUE) {
         throw PatchException(
             "This is not the libd.so this patch was written for. " +
                     "Patch tvQuickActions Pro 3.8.0."
         )
     }
 
-    w32(data, offset, MOV_W0_ZERO)
-    w32(data, offset + 4, RET)
+    for ((vaddr, expected) in TRAPS) {
+        val offset = segments.offsetOf(vaddr)
+
+        if (u32(data, offset) != expected) {
+            throw PatchException(
+                "${LIBD_PATH}: expected a trap at 0x${vaddr.toString(16)}, found " +
+                        "0x${u32(data, offset).toString(16)}. Patch tvQuickActions Pro 3.8.0."
+            )
+        }
+
+        w32(data, offset, NOP)
+    }
 }
 
 private class Segment(val type: Long, val offset: Long, val vaddr: Long, val fileSize: Long)
