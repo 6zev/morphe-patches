@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/6zev/morphe-patches/compare/v1.4.0...v1.4.1) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* make the app's own stop command a no-op ([26056ba](https://github.com/6zev/morphe-patches/commit/26056bae4198a4e362314f56d8445001fa5b4d45))
+
 ## [1.4.0](https://github.com/6zev/morphe-patches/compare/v1.3.3...v1.4.0) (2026-11-02)
 
 ### ✨ New Features
