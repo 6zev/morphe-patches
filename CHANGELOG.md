@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/6zev/morphe-patches/compare/v1.3.0...v1.3.1) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* read the build guard at the width of the instruction ([6f4483b](https://github.com/6zev/morphe-patches/commit/6f4483b3e9f48caa4d39e223b402fb1689f4b9cb))
+
 ## [1.3.0](https://github.com/6zev/morphe-patches/compare/v1.2.1...v1.3.0) (2026-11-02)
 
 ### ✨ New Features
