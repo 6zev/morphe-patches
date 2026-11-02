@@ -1,3 +1,9 @@
+## [1.3.3](https://github.com/6zev/morphe-patches/compare/v1.3.2...v1.3.3) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* disable the verification routine instead of disarming it ([d45a1d9](https://github.com/6zev/morphe-patches/commit/d45a1d903bde9d9f855ea50e9d3abb2133319b4e))
+
 ## [1.3.2](https://github.com/6zev/morphe-patches/compare/v1.3.1...v1.3.2) (2026-11-02)
 
 ### 🐛 Bug Fixes
