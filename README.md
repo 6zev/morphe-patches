@@ -55,7 +55,7 @@ https://github.com/6zev/morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.4.1](https://github.com/6zev/morphe-patches/releases/tag/v1.4.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;3 patches total
+> **[v1.4.2](https://github.com/6zev/morphe-patches/releases/tag/v1.4.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;3 patches total
 <details open>
 <summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;3 patches</summary>
 <br>

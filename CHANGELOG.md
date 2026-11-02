@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/6zev/morphe-patches/compare/v1.4.1...v1.4.2) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* the self-stop guard tested the branch the wrong way round ([107fea2](https://github.com/6zev/morphe-patches/commit/107fea26477184f3d809a630e30cd8cd990e32dd))
+
 ## [1.4.1](https://github.com/6zev/morphe-patches/compare/v1.4.0...v1.4.1) (2026-11-02)
 
 ### 🐛 Bug Fixes
