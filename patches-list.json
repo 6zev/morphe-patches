@@ -1,10 +1,10 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "patches": [
     {
       "name": "Unlock native engine",
-      "description": "Patches the native engine library (libd.so) so that it loads on a re-signed APK. On 64-bit ARM the anti-tamper constructor that destroys a global mutex is made a no-op, and on both architectures the trap instructions the verification routine plants inside its own code - udf #0 (SIGILL) and stores of 0xdead to a null pointer (SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay and button emulation work.",
+      "description": "Patches the native engine library (libd.so) so that it loads on a re-signed APK. The anti-tamper constructor that destroys a global mutex is disabled, and the trap instructions the verification routine plants inside its own code - udf #0 (SIGILL) and stores of the markers 0xdead and 0xdeadbeef (SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay and button emulation work.",
       "default": true,
       "category": null,
       "compatiblePackages": [

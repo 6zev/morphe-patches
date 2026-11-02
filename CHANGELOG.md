@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/6zev/morphe-patches/compare/v1.3.1...v1.3.2) (2026-11-02)
+
+### 🐛 Bug Fixes
+
+* neutralise every trap, and the anti-tamper constructor on 32-bit ([4c9ce8c](https://github.com/6zev/morphe-patches/commit/4c9ce8c6d26da3aa52aedae3530cab4736df93e5))
+
 ## [1.3.1](https://github.com/6zev/morphe-patches/compare/v1.3.0...v1.3.1) (2026-11-02)
 
 ### 🐛 Bug Fixes

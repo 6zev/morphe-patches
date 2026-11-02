@@ -46,7 +46,7 @@ https://github.com/6zev/morphe-patches
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.3.1](https://github.com/6zev/morphe-patches/releases/tag/v1.3.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
+> **[v1.3.2](https://github.com/6zev/morphe-patches/releases/tag/v1.3.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
 <details open>
 <summary>📦 tvQuickActions Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
 <br>
@@ -60,7 +60,7 @@ https://github.com/6zev/morphe-patches
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Unlock native engine](#unlock-native-engine) | Patches the native engine library (libd.so) so that it loads on a re-signed APK. On 64-bit ARM the anti-tamper constructor that destroys a global mutex is made a no-op, and on both architectures the trap instructions the verification routine plants inside its own code - udf #0 (SIGILL) and stores of 0xdead to a null pointer (SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay and button emulation work. |  |
+| [Unlock native engine](#unlock-native-engine) | Patches the native engine library (libd.so) so that it loads on a re-signed APK. The anti-tamper constructor that destroys a global mutex is disabled, and the trap instructions the verification routine plants inside its own code - udf #0 (SIGILL) and stores of the markers 0xdead and 0xdeadbeef (SIGSEGV) - are replaced by no-ops, leaving the routine's work intact. This is what makes Web Widget Overlay and button emulation work. |  |
 | [Unlock premium](#unlock-premium) | Makes the bundled Google LVL policy always report the app as licensed, which unlocks the premium features. |  |
 
 </details>
