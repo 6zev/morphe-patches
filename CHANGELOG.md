@@ -1,3 +1,9 @@
+## [1.6.2](https://github.com/6zev/morphe-patches/compare/v1.6.1...v1.6.2) (2026-11-07)
+
+### 🐛 Bug Fixes
+
+* match case-insensitive DEX logger opcodes ([71a63c5](https://github.com/6zev/morphe-patches/commit/71a63c5358793546684601b9191fc3de51f2fa21))
+
 ## [1.6.1](https://github.com/6zev/morphe-patches/compare/v1.6.0...v1.6.1) (2026-11-07)
 
 ### 🐛 Bug Fixes
