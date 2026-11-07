@@ -139,9 +139,11 @@ java -jar morphe-desktop-*-all.jar patch -p patches-*.mpp tvquickactions.apk
 patches/src/main/kotlin/app/tvqa/patches/
 ├── shared/Constants.kt                     # app compatibility (package, versions)
 └── tvquickactions/
-    ├── UnlockPremiumPatch.kt               # licence policy -> allowAccess() = true
-    ├── NativeEnginePatch.kt                # libd.so: the aborting constructor and the traps
-    └── NeverStopItselfPatch.kt             # stop actions: drop the app's own stop command
+    ├── AdbServerLogPatch.kt                  # redirects ADB server output to a readable log
+    ├── InitializeServerLooperPatch.kt         # avoids preparing the ADB main Looper twice
+    ├── UnlockPremiumPatch.kt                  # licence policy -> allowAccess() = true
+    ├── NativeEnginePatch.kt                   # libd.so: the aborting constructor and traps
+    └── NeverStopItselfPatch.kt                # stop actions: drop the app's own stop command
 ```
 
 `NativeEnginePatch` is a resource patch. Morphe's patcher does not list native libraries as
