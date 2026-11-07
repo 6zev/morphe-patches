@@ -91,8 +91,8 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.lowerServerLogLevel() 
     // representation is identical across dexlib/patcher versions.
     val stores = instructions.withIndex().filter { (_, instruction) ->
         val field = (instruction as? ReferenceInstruction)?.reference as? FieldReference
-        instruction.opcode.name.startsWith("SPUT") && field?.definingClass == SERVER_LOG &&
-            field.name == "c"
+        instruction.opcode.name.startsWith("SPUT", ignoreCase = true) &&
+            field?.definingClass == SERVER_LOG && field.name == "c" && field.type == "I"
     }
     if (stores.isEmpty()) {
         throw PatchException("Could not find a static write to $SERVER_LOG->c in <clinit>")
