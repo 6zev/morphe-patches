@@ -143,7 +143,7 @@ patches/src/main/kotlin/app/tvqa/patches/
     ├── AdbServerLogPatch.kt                  # redirects ADB server output to a readable log
     ├── InitializeServerLooperPatch.kt         # avoids preparing the ADB main Looper twice
     ├── UnlockPremiumPatch.kt                  # licence policy -> allowAccess() = true
-    ├── NativeEnginePatch.kt                   # libd.so: the aborting constructor and traps
+    ├── NativeEnginePatch.kt                   # libd anti-tamper + liba server self-stop (ARM32/64)
     └── NeverStopItselfPatch.kt                # stop actions: drop the app's own stop command
 ```
 
