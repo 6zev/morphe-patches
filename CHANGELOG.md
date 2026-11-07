@@ -1,3 +1,9 @@
+## [1.6.1](https://github.com/6zev/morphe-patches/compare/v1.6.0...v1.6.1) (2026-11-07)
+
+### 🐛 Bug Fixes
+
+* make ADB logger detection resilient ([ba7799a](https://github.com/6zev/morphe-patches/commit/ba7799a8221d0647715bd657c819ce74756b2cd7))
+
 ## [1.6.0](https://github.com/6zev/morphe-patches/compare/v1.5.1...v1.6.0) (2026-11-03)
 
 ### ✨ New Features
