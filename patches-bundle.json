@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-07T05:49:50",
-  "description": "## [1.6.2](https://github.com/6zev/morphe-patches/compare/v1.6.1...v1.6.2) (2026-11-07)\n\n### 🐛 Bug Fixes\n\n* match case-insensitive DEX logger opcodes ([71a63c5](https://github.com/6zev/morphe-patches/commit/71a63c5358793546684601b9191fc3de51f2fa21))",
-  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.6.2/patches-1.6.2.mpp",
+  "created_at": "2026-11-07T06:32:05",
+  "description": "## [1.6.3](https://github.com/6zev/morphe-patches/compare/v1.6.2...v1.6.3) (2026-11-07)\n\n### 🐛 Bug Fixes\n\n* reuse prepared Looper in ADB server ([c81126a](https://github.com/6zev/morphe-patches/commit/c81126a9f4d85e619405178f34bcd1e77d786eba))",
+  "download_url": "https://github.com/6zev/morphe-patches/releases/download/v1.6.3/patches-1.6.3.mpp",
   "signature_download_url": "",
-  "version": "1.6.2"
+  "version": "1.6.3"
 }
