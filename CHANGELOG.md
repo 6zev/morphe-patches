@@ -1,3 +1,9 @@
+## [1.6.8](https://github.com/6zev/morphe-patches/compare/v1.6.7...v1.6.8) (2026-11-08)
+
+### 🐛 Bug Fixes
+
+* replace Looper.prepare() with invoke-static myLooper to satisfy verifier type requirements ([3d6c794](https://github.com/6zev/morphe-patches/commit/3d6c7946dade822065ff26dcbf89b2160bc9a97a))
+
 ## [1.6.7](https://github.com/6zev/morphe-patches/compare/v1.6.6...v1.6.7) (2026-11-08)
 
 ### 🐛 Bug Fixes
