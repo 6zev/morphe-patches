@@ -22,15 +22,12 @@ private const val LOOPER_CLASS = "Landroid/os/Looper;"
  * already prepared the main thread's Looper, that throws before the server coroutine starts;
  * Server.main then misreports the exception as a port-15000 conflict and exits.
  *
- * Instead of conditionally calling Looper.prepare() with local register checks that trigger dex
- * verifier type conflicts (VerifyError), simply turn Looper.prepare() into a no-op: the main
- * looper is always prepared already by app_process or previous initialization.
+ * Replacing Looper.prepare() with nop safely neutralizes it without altering instruction offsets or counts.
  */
 @Suppress("unused")
 val initializeServerLooperPatch = bytecodePatch(
     name = "Initialize ADB server Looper",
-    description = "Avoids preparing the ADB server main Looper twice, which otherwise prevents " +
-            "the server and its input endpoints from starting.",
+    description = "Neutralizes the redundant Looper.prepare() call from the ADB server main entry point.",
     default = true
 ) {
     compatibleWith(TVQUICKACTIONS_3_8)
