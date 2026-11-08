@@ -1,3 +1,9 @@
+## [1.6.5](https://github.com/6zev/morphe-patches/compare/v1.6.4...v1.6.5) (2026-11-08)
+
+### 🐛 Bug Fixes
+
+* use safe register for Looper guard to avoid VerifyError ([f5ef3ec](https://github.com/6zev/morphe-patches/commit/f5ef3ec68938f2875d25c84792a72bbfb0489a56))
+
 ## [1.6.4](https://github.com/6zev/morphe-patches/compare/v1.6.3...v1.6.4) (2026-11-07)
 
 ### 🐛 Bug Fixes
