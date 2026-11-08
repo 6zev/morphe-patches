@@ -6,7 +6,6 @@
 
 package app.tvqa.patches.tvquickactions
 
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
@@ -22,7 +21,9 @@ private const val LOOPER_CLASS = "Landroid/os/Looper;"
  * already prepared the main thread's Looper, that throws before the server coroutine starts;
  * Server.main then misreports the exception as a port-15000 conflict and exits.
  *
- * Replacing Looper.prepare() with nop safely neutralizes it without altering instruction offsets or counts.
+ * Replacing Looper.prepare() with invoke-static { }, Landroid/os/Looper;->myLooper()Landroid/os/Looper;
+ * preserves the method signature and return type expected by subsequent instructions (like moving to sMainLooper),
+ * preventing VerifyError while effectively neutralizing the prepare() call when a Looper already exists.
  */
 @Suppress("unused")
 val initializeServerLooperPatch = bytecodePatch(
@@ -48,6 +49,6 @@ val initializeServerLooperPatch = bytecodePatch(
         }
         if (prepareIndex < 0) throw PatchException("Could not find Looper.prepare() in Server.main")
 
-        main.replaceInstruction(prepareIndex, "nop")
+        main.replaceInstruction(prepareIndex, "invoke-static {}, Landroid/os/Looper;->myLooper()Landroid/os/Looper;")
     }
 }
