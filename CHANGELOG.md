@@ -1,3 +1,9 @@
+## [1.6.6](https://github.com/6zev/morphe-patches/compare/v1.6.5...v1.6.6) (2026-11-08)
+
+### 🐛 Bug Fixes
+
+* turn Looper.prepare into nop in Server.main to eliminate VerifyError ([fe6b950](https://github.com/6zev/morphe-patches/commit/fe6b95018c1e9aac81fcec0216961aa25785835c))
+
 ## [1.6.5](https://github.com/6zev/morphe-patches/compare/v1.6.4...v1.6.5) (2026-11-08)
 
 ### 🐛 Bug Fixes
