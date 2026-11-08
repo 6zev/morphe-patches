@@ -49,19 +49,20 @@ val initializeServerLooperPatch = bytecodePatch(
         if (prepareIndex < 0) throw PatchException("Could not find Looper.prepare() in Server.main")
 
         val implementation = main.implementation!!
-        if (implementation.registerCount < 1) {
+        val registerCount = implementation.registerCount
+        if (registerCount < 1) {
             throw PatchException("Server.main has no local register for the Looper guard")
         }
+        val safeReg = registerCount - 1
 
-        // v0 is a local in this static entry point. The original prepare is replaced by a no-op,
-        // and this guarded call takes its place before it.
+        // Use the highest available register so we do not conflict with parameter or local registers.
         main.replaceInstruction(prepareIndex, "nop")
         main.addInstructions(
             prepareIndex,
             """
                 invoke-static {}, $LOOPER_CLASS->myLooper()$LOOPER_CLASS
-                move-result-object v0
-                if-nez v0, :tvqa_looper_ready
+                move-result-object v$safeReg
+                if-nez v$safeReg, :tvqa_looper_ready
                 invoke-static {}, $LOOPER_CLASS->prepare()V
                 :tvqa_looper_ready
             """.trimIndent()
