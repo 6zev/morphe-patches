@@ -1,3 +1,9 @@
+## [1.6.7](https://github.com/6zev/morphe-patches/compare/v1.6.6...v1.6.7) (2026-11-08)
+
+### 🐛 Bug Fixes
+
+* ensure Looper prepare nop is properly compiled ([4e3ef72](https://github.com/6zev/morphe-patches/commit/4e3ef72e2ea15006044796ac4640107e9e978dc5))
+
 ## [1.6.6](https://github.com/6zev/morphe-patches/compare/v1.6.5...v1.6.6) (2026-11-08)
 
 ### 🐛 Bug Fixes
