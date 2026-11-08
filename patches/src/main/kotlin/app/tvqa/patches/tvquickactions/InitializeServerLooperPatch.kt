@@ -20,8 +20,11 @@ private const val LOOPER_CLASS = "Landroid/os/Looper;"
 /**
  * The ADB server's entry point calls Looper.prepare() unconditionally. When app_process has
  * already prepared the main thread's Looper, that throws before the server coroutine starts;
- * Server.main then misreports the exception as a port-15000 conflict and exits. Reuse the current
- * thread's Looper when present, otherwise prepare it as the original code intended.
+ * Server.main then misreports the exception as a port-15000 conflict and exits.
+ *
+ * Instead of conditionally calling Looper.prepare() with local register checks that trigger dex
+ * verifier type conflicts (VerifyError), simply turn Looper.prepare() into a no-op: the main
+ * looper is always prepared already by app_process or previous initialization.
  */
 @Suppress("unused")
 val initializeServerLooperPatch = bytecodePatch(
@@ -48,24 +51,6 @@ val initializeServerLooperPatch = bytecodePatch(
         }
         if (prepareIndex < 0) throw PatchException("Could not find Looper.prepare() in Server.main")
 
-        val implementation = main.implementation!!
-        val registerCount = implementation.registerCount
-        if (registerCount < 1) {
-            throw PatchException("Server.main has no local register for the Looper guard")
-        }
-        val safeReg = registerCount - 1
-
-        // Use the highest available register so we do not conflict with parameter or local registers.
         main.replaceInstruction(prepareIndex, "nop")
-        main.addInstructions(
-            prepareIndex,
-            """
-                invoke-static {}, $LOOPER_CLASS->myLooper()$LOOPER_CLASS
-                move-result-object v$safeReg
-                if-nez v$safeReg, :tvqa_looper_ready
-                invoke-static {}, $LOOPER_CLASS->prepare()V
-                :tvqa_looper_ready
-            """.trimIndent()
-        )
     }
 }
