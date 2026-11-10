@@ -1,3 +1,9 @@
+## [1.6.9](https://github.com/6zev/morphe-patches/compare/v1.6.8...v1.6.9) (2026-11-10)
+
+### 🐛 Bug Fixes
+
+* keep ADB input working without the speed-up server ([0f08d21](https://github.com/6zev/morphe-patches/commit/0f08d21746f02a18d183b3a7de9aac1455ecad2b))
+
 ## [1.6.8](https://github.com/6zev/morphe-patches/compare/v1.6.7...v1.6.8) (2026-11-08)
 
 ### 🐛 Bug Fixes
