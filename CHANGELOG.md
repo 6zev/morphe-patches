@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/6zev/morphe-patches/compare/v1.6.9...v1.7.0) (2026-11-16)
+
+### 🐛 Bug Fixes
+
+* stop gutting the engine's verification routine. The ARM64 build had its prologue overwritten with `mov w0, wzr; ret` (and the ARM32 one with `bx lr`), which removed the routine instead of disarming its traps, leaving the engine half-initialised: `nativeActions` - the JNI entry point every key-code injection goes through - did nothing, so a remote's dialpad stopped working while pointer input kept working through `nativeRender`. Only the traps (`udf #0`, the `0xdead` / `0xdeadbeef` stores) are replaced by no-ops now, and the routine runs in full.
+
 ## [1.6.9](https://github.com/6zev/morphe-patches/compare/v1.6.8...v1.6.9) (2026-11-10)
 
 ### 🐛 Bug Fixes
