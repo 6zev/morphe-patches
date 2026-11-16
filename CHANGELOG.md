@@ -1,3 +1,9 @@
+## [1.6.10](https://github.com/6zev/morphe-patches/compare/v1.6.9...v1.6.10) (2026-11-16)
+
+### 🐛 Bug Fixes
+
+* disarm libd traps without removing the verification routine ([2e79d09](https://github.com/6zev/morphe-patches/commit/2e79d09d6dfbc9004ce3f9975f1407ab54358c6e)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)
+
 ## [1.7.0](https://github.com/6zev/morphe-patches/compare/v1.6.9...v1.7.0) (2026-11-16)
 
 ### 🐛 Bug Fixes
