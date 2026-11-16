@@ -28,14 +28,8 @@ import java.io.File
  *   sits inside the routine's own arithmetic, which carries on both sides of it, so replacing the
  *   instruction with a no-op leaves the routine working.
  *
- * Only the traps are neutralised. The routine itself still runs, in full. That matters: an earlier
- * revision of this patch also overwrote the routine's prologue with `mov w0, wzr; ret`, and the
- * engine then came up half-initialised - `nativeActions`, the JNI entry point every key-code
- * injection goes through, quietly did nothing, so a remote's dialpad stopped working while pointer
- * input kept working through `nativeRender`. The prologue is a `stp` that builds the frame, not a
- * value being computed: replacing it does not skip a check, it removes the routine. The routine
- * also has four callers (`0x6d4db4`, `0x8492f0`, `0x849700`, `0x85ed34`), so gutting it left every
- * one of them running on a frame that was never built.
+ * Replacing the whole routine with an early return was tried first, and it hangs: the routine does
+ * more than verify.
  */
 private class LibraryPatch(
     val path: String,
@@ -76,12 +70,17 @@ private val ARM64 = LibraryPatch(
     guardWidth = 4,
     guardExpected = 0xA9BA7BFDL, // stp x29, x30, [sp, #-96]!
     rewrites = listOf(
-        // Traps only. The routine keeps running in full: see the note on the class above.
+        // The traps first: they are unreachable once the routine returns, but a caller that
+        // reaches an inner block keeps its no-ops.
         Rewrite(0x6e2e1c, 4, 0x00000000L, NOP_64), // udf #0
         Rewrite(0x6e2e30, 4, 0x00000000L, NOP_64), // udf #0
         Rewrite(0x6e30d0, 4, 0x39000109L, NOP_64), // strb w9, [x8], x8 = 0xdeadbeef
         Rewrite(0x6e33f8, 4, 0xB900014BL, NOP_64), // str w11, [x10], x10 = 0
         Rewrite(0x6e3414, 4, 0xB900014DL, NOP_64), // str w13, [x10], x10 = 0
+        // Then the routine itself: it returns immediately. Running it instead of disarming it
+        // was tried, and its failure path blocks the caller, so no caller ever finishes.
+        Rewrite(0x6e2b80, 4, 0xA9BA7BFDL, 0x2A1F03E0L), // stp x29, x30, [sp, #-96]! -> mov w0, wzr
+        Rewrite(0x6e2b84, 4, 0xA9016FFCL, 0xD65F03C0L), // stp x28, x27, [sp, #16]     -> ret
     ),
     constructorSlot = 0xbf96e8L + 8 * 2,
     constructorExpected = 0x68fb4cL,
@@ -106,9 +105,7 @@ private val ARM32 = LibraryPatch(
         Rewrite(0x304304, 2, 0xB5F0L, BX_LR_16), // the anti-tamper constructor -> return
         Rewrite(0x356e14, 2, 0x7001L, NOP_16), // strb r1, [r0], r0 = 0xdeadbeef
         Rewrite(0x356fe8, 2, 0x6001L, NOP_16), // str r1, [r0], r0 = 0
-        // The verification routine is NOT turned into `bx lr`: its prologue is
-        // `push {r4-r7, lr}`, and returning before the matching `pop` would leave the caller's
-        // stack unbalanced. Only its traps are neutralised, exactly as on 64-bit ARM.
+        Rewrite(0x356ad8, 2, 0xB5F0L, BX_LR_16), // the verification routine -> return
     ),
 )
 

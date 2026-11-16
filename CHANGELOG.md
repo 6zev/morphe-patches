@@ -2,13 +2,14 @@
 
 ### 🐛 Bug Fixes
 
-* disarm libd traps without removing the verification routine ([2e79d09](https://github.com/6zev/morphe-patches/commit/2e79d09d6dfbc9004ce3f9975f1407ab54358c6e)), closes [#0](https://github.com/6zev/morphe-patches/issues/0)
+* disarm libd traps without removing the verification routine ([2e79d09](https://github.com/6zev/morphe-patches/commit/2e79d09d6dfbc9004ce3f9975f1407ab54358c6e))
 
-## [1.7.0](https://github.com/6zev/morphe-patches/compare/v1.6.9...v1.7.0) (2026-11-16)
+## [1.6.11](https://github.com/6zev/morphe-patches/compare/v1.6.10...v1.6.11) (2026-11-16)
 
 ### 🐛 Bug Fixes
 
-* stop gutting the engine's verification routine. The ARM64 build had its prologue overwritten with `mov w0, wzr; ret` (and the ARM32 one with `bx lr`), which removed the routine instead of disarming its traps, leaving the engine half-initialised: `nativeActions` - the JNI entry point every key-code injection goes through - did nothing, so a remote's dialpad stopped working while pointer input kept working through `nativeRender`. Only the traps (`udf #0`, the `0xdead` / `0xdeadbeef` stores) are replaced by no-ops now, and the routine runs in full.
+* **dialpad without the engine**: the key code was the one input still injected through the native engine (`nativeActions`), which silently does nothing on a re-signed APK - that is why a remote's numpad was dead while pointer input, which uses the app's own `InputManager` path, kept working. The fallback now builds a `KeyEvent` DOWN/UP pair and injects it with `K1/o.R(int, int)`, the same call the app already uses for its own server endpoints.
+* revert the native engine change that removed the verification routine: running it in full made the app ANR (`failed to complete startup`, 98% CPU). The traps are disarmed and the routine is skipped again, which is known to start.
 
 ## [1.6.9](https://github.com/6zev/morphe-patches/compare/v1.6.8...v1.6.9) (2026-11-10)
 
