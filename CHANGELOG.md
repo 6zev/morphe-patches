@@ -2,6 +2,12 @@
 
 ### 🐛 Bug Fixes
 
+* never call the engine's verification routine, leave it intact ([6dcc8c2](https://github.com/6zev/morphe-patches/commit/6dcc8c27f2ec9ebfaf114116226f7fa8cbc1d28f))
+
+## [1.7.1](https://github.com/6zev/morphe-patches/compare/v1.7.0...v1.7.1) (2026-11-16)
+
+### 🐛 Bug Fixes
+
 * **keep the engine's verification routine intact and stop calling it.** Both earlier attempts edited the routine itself, and both failed on the device: overwriting its prologue with `mov w0, wzr; ret` left the engine half-initialised, so `nativeActions` - the JNI entry point behind every key-code injection - silently did nothing and a remote's dialpad stayed dead; running it in full made the app ANR during startup (`failed to complete startup`, 98% CPU). The routine has exactly four callers in the ARM64 build (and four in the ARM32 one), so those `bl` sites are now no-ops and the routine is never entered. The prologue and body are untouched, which is also what a build without the protection does - 3.6.0 ships the same `nativeActions` key-code path and its dialpad works.
 * **drop the dialpad patch that went through `InputManager`**: it made every dialpad key raise `SecurityException: Injecting to another application requires INJECT_EVENTS permission`, since `INJECT_EVENTS` is a signature permission the app cannot hold. It also replaced the fallback unconditionally, so it broke key injection even with "ADB speed up" off.
 
