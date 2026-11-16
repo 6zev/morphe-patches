@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/6zev/morphe-patches/compare/v1.6.10...v1.7.0) (2026-11-16)
+
+### ✨ New Features
+
+* inject dialpad key codes without the native engine ([31a5e44](https://github.com/6zev/morphe-patches/commit/31a5e44582b956e3b2a806603a25f34511b45ea4))
+
 ## [1.6.10](https://github.com/6zev/morphe-patches/compare/v1.6.9...v1.6.10) (2026-11-16)
 
 ### 🐛 Bug Fixes
