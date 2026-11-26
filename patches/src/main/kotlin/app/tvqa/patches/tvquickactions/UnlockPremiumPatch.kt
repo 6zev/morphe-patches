@@ -250,11 +250,7 @@ private fun patchEngine64(elf: ElfFile) {
     // are table dispatches the engine uses for its own work; rewriting them turns a jump into
     // the neighbouring case into a fall-through into code that was never meant to run, which is
     // the same class of crash as stubbing a caller.
-    val traps = mutableListOf<Long>()
-
-    for (routine in routines) {
-        traps += routine.trapSites(elf, 0x2000)
-    }
+    val traps = elf.engineTrapSites()
 
     if (traps.isEmpty()) {
         throw PatchException(
@@ -264,6 +260,12 @@ private fun patchEngine64(elf: ElfFile) {
         )
     }
 
+    // The engine refuses through this one decision many times over: it is compiled into the
+    // licence code, into every premium action that gates on the licence and into the helpers
+    // they share. The copy inside the verification routine is disarmed from the routine itself;
+    // the ones elsewhere are the same four instructions followed by the same `br`, and they are
+    // what still stopped the app once the routine was patched, so every one of them is searched
+    // for and disarmed across the library.
     for (trap in traps.distinct()) elf.write(trap, 4, NOP_64)
 
     // The callers stay: they are the engine's own routines, and skipping them leaves the work
@@ -294,19 +296,31 @@ private fun ElfFile.locateEngine64All(): List<Long> {
     // walks tables and holds far more branches. The copy is found from the tail of the
     // function: the shape of a check is the traps it plants and the store of the value it keeps,
     // so the trap and the store that raises it are searched as one sequence.
+    //
+    // The window has to reach the whole body: 3.8.0 and 3.9.0 both carry a second copy that is
+    // larger than the first, and 0x2000 cuts it off before its refusals, which made the filter
+    // reject a real check and the patch report the routine as missing. What names the check
+    // instead is the refusal itself: nothing but the copyright tail stores the dead value, and
+    // the two general routines never do, so the shape is counted rather than moved.
     return candidates
-        .filter { site ->
-            trapCount(site, 0x2000) in 6..16 && branchLinkCount(site, 0x2000) <= 4
-        }
+        .filter { site -> refusalCount(site, ENGINE_64_WINDOW) in 1..24 }
         .ifEmpty { throw PatchException("${file.name}: the licence verification routine was not found. This patch supports tvQuickActions Pro 3.x.") }
 }
 
-/**
- * How many of the outcomes of the routine that opens at [entry] end by jumping through a
- * register, counted in [window] bytes.
- */
-private fun ElfFile.trapCount(entry: Long, window: Int): Int =
-    (0 until window step 4).count { offset -> read(entry + offset, 4) == TRAP_64 }
+/** How far the scan looks inside a candidate; the largest copy is a little over 0x2000 long. */
+private const val ENGINE_64_WINDOW = 0x3000
+
+/** How many refusals the routine that opens at [entry] raises, counted in [window] bytes. */
+private fun ElfFile.refusalCount(entry: Long, window: Int): Int {
+    var count = 0
+
+    for (index in 0 until window step 4) {
+        if (isEngine64TrapSiteAt(entry + index)) count++
+    }
+
+    return count
+}
+
 
 /**
  * The addresses inside the function that opens at this address that raise the engine's trap.
@@ -316,25 +330,41 @@ private fun ElfFile.trapCount(entry: Long, window: Int): Int =
  * engine's own dispatches, so a plain search for `br x8` is not enough — the tail is what names
  * the refusals and nothing else.
  */
-private fun Long.trapSites(elf: ElfFile, window: Int): List<Long> {
-    val sites = mutableListOf<Long>()
+private fun Long.trapSites(elf: ElfFile, window: Int): List<Long> =
+    (0 until window step 4).mapNotNull { index ->
+        val compare = this + index
 
-    for (index in 0 until window step 4) {
-        val address = this + index
-
-        // The value is loaded through the frame pointer, compared into the selector, and stored
-        // next to the byte that picks the stop; the `br x8` that follows is the stop itself. The
-        // frame offset and the register move between builds, so only the shapes are compared.
-        if (elf.read(address + 4, 4) != 0x1A9F17E9L) continue
-        if (elf.read(address + 8, 4) != 0xF8695908L) continue
-        if (!isEngine64TrapStore(elf.read(address + 0xC, 4).toInt())) continue
-        if (elf.read(address + 0x10, 4) != TRAP_64) continue
-
-        sites += address + 0x10
+        if (elf.isEngine64TrapSiteAt(compare)) compare + 0x10 else null
     }
 
-    return sites
-}
+/**
+ * Every address in the library where the engine raises its licence refusal.
+ *
+ * The refusal is always the same four instructions: load the licence code, compare it into the
+ * selector, store the selector next to the byte that picks the outcome, and jump through the
+ * register the selector chose. The `br` is what makes the site a refusal rather than some other
+ * read of the same field, and it is also the only part of the sequence the engine's own table
+ * dispatches do not share. The search runs over the whole library rather than one routine's
+ * window because the decision is inlined wherever the licence is consulted.
+ */
+private fun ElfFile.engineTrapSites(): List<Long> =
+    findEngineTrapStarts().map { it + 0xC }
+
+/** The first word of every refusal sequence in the library. */
+private fun ElfFile.findEngineTrapStarts(): List<Long> =
+    findAllWords(0x1A9F17E9L, 4).filter { isEngine64TrapSiteAt(it) }
+
+/**
+ * Whether the four instructions at [compare] are one of the engine's refusals: the value is
+ * loaded through the frame pointer, compared into the selector, and stored next to the byte
+ * that picks the stop; the `br x8` after them is the stop itself. The frame offset and the
+ * register move between builds, so only the shapes are compared.
+ */
+private fun ElfFile.isEngine64TrapSiteAt(compare: Long): Boolean =
+    read(compare, 4) == 0x1A9F17E9L &&
+            read(compare + 4, 4) == 0xF8695908L &&
+            isEngine64TrapStore(read(compare + 8, 4).toInt()) &&
+            read(compare + 0xC, 4) == TRAP_64
 
 /** `str w9, [sp, #imm]`, whose #imm is the only part that changes between builds. */
 private fun isEngine64TrapStore(word: Int): Boolean = (word and 0xFFC00000.toInt()) == 0xB9000000.toInt()
