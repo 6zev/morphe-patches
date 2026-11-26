@@ -60,9 +60,11 @@ private const val GLUE_32 = "lib/armeabi-v7a/liba.so"
  * - The native wall is the engine. `libd.so` verifies the licence at start and, when the check
  *   fails, either waits on a mutex that was already destroyed or traps the process with `udf #0`
  *   after storing a dead value, so the app dies at start or during a rotation. The verification
- *   routine is found by the code it opens with and every branch that reaches it is neutered with
- *   a `nop`, and its constructor is pointed at a routine that returns immediately, so the
- *   verification never runs and the engine still initialises.
+ *   routine is found by the code it opens with, and only its own refusals are taken out: the
+ *   `br` that jumps to the trap becomes a `nop`, and on arm32 the two stores of the dead value
+ *   are nop'ed. The routine still runs, still has its callers and still has its constructor,
+ *   because every one of them does work beside the check; removing the refusals alone is what
+ *   leaves the engine fully built and licensed.
  *
  * The engine glue in `liba.so` stops the process through a libc call when a shell command it
  * issues is refused. Every call site that hands it a non-zero value is rewritten to hand it
@@ -70,10 +72,10 @@ private const val GLUE_32 = "lib/armeabi-v7a/liba.so"
  * taken while the rest of the glue keeps working.
  *
  * Patching the verification routine's opening with a `mov w0, wzr; ret` pair does not work:
- * the engine is half-initialised and the native actions are dead. Running it fully does not
- * work either, because the verification then spins and the app starts at 98% CPU. The routine
- * has to be left in place and never called, which is what the `nop` and the constructor
- * redirect do.
+ * the engine is half-initialised and the native actions are dead. Stubbing its callers or its
+ * constructor does not work either, and it is worse: the engine keeps starting with the state
+ * those functions set up left behind, and the process aborts on a destroyed mutex. The routine
+ * has to keep running; only the refusals it raises are skipped.
  */
 @Suppress("unused")
 val unlockPremiumPatch = bytecodePatch(
@@ -208,10 +210,6 @@ private const val FILLER_32 = 0x2000L
 
 private const val NOP_64 = 0xD503201FL
 private const val NOP_16 = 0x0000BF00L
-private const val BX_LR_16 = 0x00004770L
-
-/** A routine that does nothing and returns, used to replace the engine constructor. */
-private const val STUB_64 = 0xD65F03C0L
 
 /** Rewrites [address] when it still holds [expected], and refuses the build when it does not. */
 private fun ElfFile.replace(address: Long, width: Int, expected: Long, replacement: Long) {
@@ -247,10 +245,15 @@ private fun patchEngine64(elf: ElfFile) {
     // The check refuses by branching to a block that raises `udf #0` through `br x8`; the trap
     // is reached from the register the branch took, so the branch target itself is what turns
     // the refusal into a fall-through.
+    //
+    // Only the `br x8` copies are refusals. The body also jumps through x9 and x10, and those
+    // are table dispatches the engine uses for its own work; rewriting them turns a jump into
+    // the neighbouring case into a fall-through into code that was never meant to run, which is
+    // the same class of crash as stubbing a caller.
     val traps = mutableListOf<Long>()
 
     for (routine in routines) {
-        traps += routine.wordSites(elf, ENGINE_64_TRAP_BRANCH, 0x2000)
+        traps += routine.trapSites(elf, 0x2000)
     }
 
     if (traps.isEmpty()) {
@@ -263,23 +266,9 @@ private fun patchEngine64(elf: ElfFile) {
 
     for (trap in traps.distinct()) elf.write(trap, 4, NOP_64)
 
-    // A caller can only be there to run the check, so pointing it at nothing lets the engine
-    // through on every path that asks. Every copy is disarmed, so every copy's callers go.
-    for (caller in routines.flatMap { elf.blCallers(it) }.distinct()) elf.write(caller, 4, NOP_64)
-
-    // Nothing in the body is called: the check leaves through the traps, so every call out of
-    // the routine reaches either the refusal path or the code that runs once the licence is
-    // granted, and the engine only has to be let in. A build that does reach the check from a
-    // constructor is handled the same way the arm32 build is: the constructor is redirected.
-    val constructor = routines.firstNotNullOfOrNull { elf.constructorCallingAt(it) }
-
-    if (constructor != null && !elf.redirectConstructor(constructor, STUB_64)) {
-        throw PatchException(
-            "${elf.file.name}: the INIT_ARRAY slot of the engine constructor at 0x" +
-                    "${constructor.toString(16)} cannot be rewritten. This patch supports " +
-                    "tvQuickActions Pro 3.x."
-        )
-    }
+    // The callers stay: they are the engine's own routines, and skipping them leaves the work
+    // they do beside the check half-done, which aborts the process with a destroyed mutex.
+    // The constructor stays for the same reason, so nothing else in this routine is touched.
 }
 
 /**
@@ -319,9 +308,36 @@ private fun ElfFile.locateEngine64All(): List<Long> {
 private fun ElfFile.trapCount(entry: Long, window: Int): Int =
     (0 until window step 4).count { offset -> read(entry + offset, 4) == TRAP_64 }
 
-/** The addresses of [word] inside the function that opens at [opening]. */
-private fun Long.wordSites(elf: ElfFile, word: Int, window: Int): List<Long> =
-    elf.search(this, this + window, word.toLong(), 4)
+/**
+ * The addresses inside the function that opens at this address that raise the engine's trap.
+ *
+ * Only the `br x8` copies are refusals: each one is preceded by the compare, the table load and
+ * the store that plant the dead value. The body also jumps through x9 and x10, which are the
+ * engine's own dispatches, so a plain search for `br x8` is not enough — the tail is what names
+ * the refusals and nothing else.
+ */
+private fun Long.trapSites(elf: ElfFile, window: Int): List<Long> {
+    val sites = mutableListOf<Long>()
+
+    for (index in 0 until window step 4) {
+        val address = this + index
+
+        // The value is loaded through the frame pointer, compared into the selector, and stored
+        // next to the byte that picks the stop; the `br x8` that follows is the stop itself. The
+        // frame offset and the register move between builds, so only the shapes are compared.
+        if (elf.read(address + 4, 4) != 0x1A9F17E9L) continue
+        if (elf.read(address + 8, 4) != 0xF8695908L) continue
+        if (!isEngine64TrapStore(elf.read(address + 0xC, 4).toInt())) continue
+        if (elf.read(address + 0x10, 4) != TRAP_64) continue
+
+        sites += address + 0x10
+    }
+
+    return sites
+}
+
+/** `str w9, [sp, #imm]`, whose #imm is the only part that changes between builds. */
+private fun isEngine64TrapStore(word: Int): Boolean = (word and 0xFFC00000.toInt()) == 0xB9000000.toInt()
 
 /**
  * Patches the arm32 engine.
@@ -404,22 +420,11 @@ private fun patchEngine32(elf: ElfFile) {
         )
     }
 
-    for (caller in callers) elf.write(caller, 4, NOP_16 or (NOP_16 shl 16))
-
-    // The constructor is the one function that opens with the engine's full frame, so it is
-    // matched by its whole opening rather than by the distance to anything else.
-    // Two functions share the engine's full frame, and neither is unique on its own. The
-    // constructor is the one that calls the routine: the check is run from its body, so the
-    // function that owns the call is the entry to disarm.
-    val constructor = elf.findAll(ENGINE_32_CONSTRUCTOR_OPENING_SIGNATURE)
-        .filter { entry -> callers.any { elf.owns(entry, it) } }
-        .minByOrNull { entry -> callers.minOf { it - entry } }
-        ?: throw PatchException(
-            "${elf.file.name}: the engine constructor was not found. " +
-                    "This patch supports tvQuickActions Pro 3.x."
-        )
-
-    elf.replace(constructor, 2, ENGINE_32_CONSTRUCTOR_OPENING, BX_LR_16)
+    // The callers stay: they are the routine's own call sites inside the engine, and skipping
+    // them leaves the state they set up beside the check half-built, which aborts the process.
+    // The constructor stays too for the same reason: it builds the engine's object before it
+    // runs the check. Only the two stores of the dead value go, so the check runs and refuses
+    // nothing.
 }
 
 /**
@@ -432,22 +437,34 @@ private fun patchEngine32(elf: ElfFile) {
  * other way the glue can stop itself, is turned into a return.
  */
 private fun patchGlue64(elf: ElfFile) {
-    val selection = elf.locate(GLUE_64_SIGNATURE)
-        ?: throw PatchException(
-            "${elf.file.name}: the shell-command guard was not found. " +
-                    "This patch supports tvQuickActions Pro 3.x."
-        )
+    // The block is re-laid-out between builds, so every build carries its own table of the
+    // instructions the selections hold, relative to the point its signature matches. The first
+    // table whose instructions are all in place is the one the library was built with.
+    val variant = GLUE_64_VARIANTS.firstOrNull { candidate ->
+        val selection = runCatching { elf.locate(candidate.signature) }.getOrNull() ?: return@firstOrNull false
+
+        candidate.selections.all { (offset, instruction) ->
+            runCatching { elf.read(selection + offset, 4) == instruction }.getOrDefault(false)
+        }
+    } ?: throw PatchException(
+        "${elf.file.name}: the shell-command guard was not found. " +
+                "This patch supports tvQuickActions Pro 3.x."
+    )
+
+    val selection = elf.locate(variant.signature) ?: return
 
     // The value the guard passes to the stop is selected a few instructions after the block the
     // signature matches; every selection in the routine is forced to the zero arm.
-    for ((offset, instruction) in GLUE_64_SELECTIONS) {
-        val site = selection + offset
-
-        if (elf.read(site, 4) == MOV_W0_WZR_64) continue
-
-        elf.replace(site, 4, instruction, MOV_W0_WZR_64)
-    }
+    for ((offset, _) in variant.selections) elf.write(selection + offset, 4, MOV_W0_WZR_64)
 }
+
+/**
+ * The arm64 guard as it is laid out by each build.
+ */
+private class Glue64Variant(
+    val signature: IntArray,
+    val selections: List<Pair<Int, Long>>,
+)
 
 private const val MOV_W0_WZR_64 = 0x2A1F03E0L
 
@@ -520,9 +537,6 @@ private val ENGINE_64_SIGNATURE = intArrayOf(
     0xD10A83FF.toInt(), // sub sp, sp, #0x2A0
 )
 
-/** `br x8`: every refusal ends by jumping through the register the check left its index in. */
-private const val ENGINE_64_TRAP_BRANCH = 0xD61F0100.toInt()
-
 /**
  * Opening of the arm32 licence verification routine: the `push` and the frame it builds.
  *
@@ -541,15 +555,6 @@ private val ENGINE_32_OPENING = intArrayOf(
     0x8D04, // str r5, [sp, #16]
 )
 
-/** The two instructions the arm32 engine constructor opens with. */
-private val ENGINE_32_CONSTRUCTOR_OPENING_SIGNATURE = intArrayOf(
-    0xB5F0, // push {r4, r5, r6, r7, lr}
-    0xAF03, // add r7, sp, #12
-    0xE92D, // push.w {…}
-    0x0F00, // …
-)
-
-private const val ENGINE_32_CONSTRUCTOR_OPENING = 0xB5F0L
 
 /**
  * The arm64 shell-command guard.
@@ -580,14 +585,41 @@ private val GLUE_64_SIGNATURE = intArrayOf(
  * moving the outcome out with `csel`/`csinc`; every one of them is forced to the zero arm, so the
  * stop always receives zero.
  */
-private val GLUE_64_SELECTIONS = listOf(
-    0x24 to 0x5283D00AL, // mov w10, #0x1e80 — the folded comparison constant
-    0x34 to 0x72A0F1A9L, // movk w9, #0x79, lsl #16
-    0x38 to 0x0A090108L, // and w8, w9, w9
-    0x50 to 0x6B09011FL, // cmp w8, w9
-    0x64 to 0xB9000109L, // str w9, [x8]
-    0x80 to 0xD61F0120L, // br x9 — the stop the guard jumps through
+private val GLUE_64_LEGACY_SIGNATURE = intArrayOf(
+    0x5283D00A, // mov w10, #0x1e80
+    0x5296C4CB, // mov w11, #0xb626
+    0xF0001FA8.toInt(), // adrp x8, …
+    0xF0001FA9.toInt(), // adrp x9, …
+    0x72BAC14A, // movk w10, #0xd60, lsl #16
+    0x72B5C5EB.toInt(), // movk w11, #0xae2e, lsl #16
+    0xB9268F1F.toInt(), // str w?, [x24, …]
 )
+
+private val GLUE_64_VARIANTS = listOf(
+    Glue64Variant(
+        signature = GLUE_64_LEGACY_SIGNATURE,
+        selections = listOf(
+            0x00 to 0x5283D00AL, // mov w10, #0x1e80
+            0x10 to 0x72BAC14AL, // movk w10, #0xd60, lsl #16
+            0x14 to 0x72B5C5EBL, // movk w11, #0xae2e, lsl #16
+            0x2C to 0x6B0B019FL, // cmp w12, w11
+            0x38 to 0xF86D598CL, // ldr x12, [x12, …]
+            0x40 to 0xD61F0180L, // br x12 — the stop the guard jumps through
+        ),
+    ),
+    Glue64Variant(
+        signature = GLUE_64_SIGNATURE,
+        selections = listOf(
+            0x24 to 0x5283D00AL, // mov w10, #0x1e80 — the folded comparison constant
+            0x34 to 0x72A0F1A9L, // movk w9, #0x79, lsl #16
+            0x38 to 0x0A090108L, // and w8, w9, w9
+            0x50 to 0x6B09011FL, // cmp w8, w9
+            0x64 to 0xB9000109L, // str w9, [x8]
+            0x80 to 0xD61F0120L, // br x9 — the stop the guard jumps through
+        ),
+    ),
+)
+
 
 /**
  * The arm32 shell-command guard, found by the read-modify-write of the engine's own field that
