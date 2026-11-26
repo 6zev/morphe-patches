@@ -1,3 +1,9 @@
+## [1.7.5](https://github.com/6zev/morphe-patches/compare/v1.7.4...v1.7.5) (2026-11-26)
+
+### 🐛 Bug Fixes
+
+* **patches:** disarm every licence refusal in the engine, not just the routine's ([6186676](https://github.com/6zev/morphe-patches/commit/6186676e008220c98061c944dd861a090154230c))
+
 ## [1.7.4](https://github.com/6zev/morphe-patches/compare/v1.7.3...v1.7.4) (2026-11-26)
 
 ### 🐛 Bug Fixes
