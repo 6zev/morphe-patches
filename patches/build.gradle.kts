@@ -46,13 +46,21 @@ val runPatch by tasks.registering(JavaExec::class) {
     description = "Runs the built patch bundle over an APK."
     dependsOn(tasks.named("jar"))
 
+    // Read through providers so the properties are only queried when the task actually runs: a
+    // plain `gradle tasks` (or the release job) configures this task without -Papk/-Pout, and
+    // must not fail on their absence.
     val apk = providers.gradleProperty("apk")
     val out = providers.gradleProperty("out")
-    val bundle = tasks.named<Jar>("jar").get().archiveFile
+    val bundle = tasks.named<Jar>("jar").flatMap { it.archiveFile }
+
+    inputs.property("apk", apk)
+    inputs.property("out", out)
 
     doFirst { println("input=${apk.get()} output=${out.get()}") }
-    classpath = files(bundle.get().asFile) + configurations.getByName("runtimeClasspath")
+    classpath = files(bundle) + configurations.getByName("runtimeClasspath")
     mainClass.set("util.RunPatcherKt")
     systemProperty("runPatch.bundle", bundle.get().asFile.absolutePath)
-    args = listOf(apk.get(), out.get())
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(apk.get(), out.get())
+    })
 }
