@@ -105,6 +105,25 @@ class ElfFile private constructor(
         .maxOrNull()
 
     /**
+     * How many instructions in the function that opens at [entry], within [window], call out.
+     *
+     * A routine that solves one problem in place is a long stretch of straight-line code; one
+     * that decides something asks helpers for each answer. The licence check reads the licence,
+     * asks the clock and then acts on what it is told, so it is the one of the routines opening
+     * with the same saved registers that calls out.
+     */
+    fun branchLinkCount(entry: Long, window: Long): Int {
+        val segment = segments.firstOrNull {
+            it.executable && entry >= it.vaddr && entry < it.vaddr + it.fileSize
+        } ?: return 0
+
+        return (0 until window step 4).count { offset ->
+            u((segment.offset + (entry - segment.vaddr + offset)).toInt(), 4) shr 26 and 0x3FL ==
+                    0x25L
+        }
+    }
+
+    /**
      * Whether the function starting at `entry` is the one that makes the call at `site`.
      *
      * arm32 only: `bx lr` returns from a Thumb function.
@@ -386,6 +405,40 @@ class ElfFile private constructor(
 
             found
         }
+    }
+
+    /**
+     * Every address in `[start, end)` that holds [word], aligned to [width].
+     *
+     * The bounds are virtual addresses, so a routine can be scanned from its opening without
+     * knowing how long it is.
+     */
+    fun search(start: Long, end: Long, word: Long, width: Int): List<Long> {
+        val wanted = ByteArray(width) { ((word shr (8 * it)) and 0xFF).toByte() }
+
+        // [main] holds the body, so it is walked first; the network of the library is there to
+        // be found, and the rest of the mapping only matters when it is not.
+        return segments.filter { it.executable }.sortedByDescending { it.fileSize }.flatMap { segment ->
+            val first = maxOf(start, segment.vaddr)
+            val last = minOf(end, segment.vaddr + segment.fileSize) - width
+            val found = mutableListOf<Long>()
+
+            var address = first + (width - (first - segment.vaddr) % width) % width
+            while (address <= last) {
+                val offset = (segment.offset + (address - segment.vaddr)).toInt()
+                if (wanted.indices.all { data[offset + it] == wanted[it] }) found += address
+                address += width
+            }
+
+            found
+        }
+    }
+
+    /** The value of [width] little-endian bytes at a virtual address, or `null` when unbacked. */
+    fun wordAt(vaddr: Long, width: Int = 2): Long? {
+        val offset = fileOffsetOf(vaddr) ?: return null
+
+        return u(offset, width)
     }
 
     /** The address the branch at [address] reaches, or `null` when there is no branch there. */
