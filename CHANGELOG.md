@@ -1,3 +1,9 @@
+## [1.7.6](https://github.com/6zev/morphe-patches/compare/v1.7.5...v1.7.6) (2026-11-26)
+
+### 🐛 Bug Fixes
+
+* **patches:** land the engine disarm on the branch, not the word after it ([e04781f](https://github.com/6zev/morphe-patches/commit/e04781f1851da2209c3e8879591ec842b35b2693))
+
 ## [1.7.5](https://github.com/6zev/morphe-patches/compare/v1.7.4...v1.7.5) (2026-11-26)
 
 ### 🐛 Bug Fixes
