@@ -1,3 +1,9 @@
+## [1.7.7](https://github.com/6zev/morphe-patches/compare/v1.7.6...v1.7.7) (2026-11-26)
+
+### 🐛 Bug Fixes
+
+* **patches:** drop the native licence disarm, keep the Java grant only ([ead2419](https://github.com/6zev/morphe-patches/commit/ead2419948d5072f34f79db486f01896786c780e))
+
 ## [1.7.6](https://github.com/6zev/morphe-patches/compare/v1.7.5...v1.7.6) (2026-11-26)
 
 ### 🐛 Bug Fixes
