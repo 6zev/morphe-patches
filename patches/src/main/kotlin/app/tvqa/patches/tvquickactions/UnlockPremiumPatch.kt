@@ -250,7 +250,15 @@ private fun patchEngine64(elf: ElfFile) {
     // are table dispatches the engine uses for its own work; rewriting them turns a jump into
     // the neighbouring case into a fall-through into code that was never meant to run, which is
     // the same class of crash as stubbing a caller.
-    val traps = elf.engineTrapSites()
+    // Only the refusals inside the verification routine are disarmed. The same four
+    // instructions are inlined everywhere the engine reads the licence code, and the ones
+    // outside the check are followed by straight-line continuation rather than by the block
+    // that raises the stop: taking them away removes reads the engine still needs and the
+    // process hangs before its first frame is drawn, so the routine's own window stays the
+    // only place this patch writes.
+    val traps = mutableListOf<Long>()
+
+    for (routine in routines) traps += routine.trapSites(elf, ENGINE_64_WINDOW)
 
     if (traps.isEmpty()) {
         throw PatchException(
@@ -260,12 +268,6 @@ private fun patchEngine64(elf: ElfFile) {
         )
     }
 
-    // The engine refuses through this one decision many times over: it is compiled into the
-    // licence code, into every premium action that gates on the licence and into the helpers
-    // they share. The copy inside the verification routine is disarmed from the routine itself;
-    // the ones elsewhere are the same four instructions followed by the same `br`, and they are
-    // what still stopped the app once the routine was patched, so every one of them is searched
-    // for and disarmed across the library.
     for (trap in traps.distinct()) elf.write(trap, 4, NOP_64)
 
     // The callers stay: they are the engine's own routines, and skipping them leaves the work
@@ -334,25 +336,8 @@ private fun Long.trapSites(elf: ElfFile, window: Int): List<Long> =
     (0 until window step 4).mapNotNull { index ->
         val compare = this + index
 
-        if (elf.isEngine64TrapSiteAt(compare)) compare + 0x10 else null
+        if (elf.isEngine64TrapSiteAt(compare)) compare + 0xC else null
     }
-
-/**
- * Every address in the library where the engine raises its licence refusal.
- *
- * The refusal is always the same four instructions: load the licence code, compare it into the
- * selector, store the selector next to the byte that picks the outcome, and jump through the
- * register the selector chose. The `br` is what makes the site a refusal rather than some other
- * read of the same field, and it is also the only part of the sequence the engine's own table
- * dispatches do not share. The search runs over the whole library rather than one routine's
- * window because the decision is inlined wherever the licence is consulted.
- */
-private fun ElfFile.engineTrapSites(): List<Long> =
-    findEngineTrapStarts().map { it + 0xC }
-
-/** The first word of every refusal sequence in the library. */
-private fun ElfFile.findEngineTrapStarts(): List<Long> =
-    findAllWords(0x1A9F17E9L, 4).filter { isEngine64TrapSiteAt(it) }
 
 /**
  * Whether the four instructions at [compare] are one of the engine's refusals: the value is
