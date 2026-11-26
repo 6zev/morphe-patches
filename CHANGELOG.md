@@ -1,3 +1,9 @@
+## [1.7.4](https://github.com/6zev/morphe-patches/compare/v1.7.3...v1.7.4) (2026-11-26)
+
+### 🐛 Bug Fixes
+
+* **patches:** disarm only the engine refusals, never its callers ([71a7df5](https://github.com/6zev/morphe-patches/commit/71a7df5b8e9fad327e977c9bb8de13e33840f3fd))
+
 ## [1.7.3](https://github.com/6zev/morphe-patches/compare/v1.7.2...v1.7.3) (2026-11-26)
 
 ### 🐛 Bug Fixes
