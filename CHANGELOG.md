@@ -1,3 +1,9 @@
+## [1.7.3](https://github.com/6zev/morphe-patches/compare/v1.7.2...v1.7.3) (2026-11-26)
+
+### 🐛 Bug Fixes
+
+* **patches:** anchor the arm32 shell-command guard on its decision seats ([bffd0e0](https://github.com/6zev/morphe-patches/commit/bffd0e0a02d8ab629a605266757c5226e1931eb3))
+
 ## [1.7.2](https://github.com/6zev/morphe-patches/compare/v1.7.1...v1.7.2) (2026-11-26)
 
 ### 🐛 Bug Fixes
