@@ -413,18 +413,16 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.disableHeartbeat() {
         ),
     )
 
-    // Nothing is written back: the body is replaced by the lock/unlock pair the verifier expects
-    // from a `synchronized` method, and the write path is left as dead code.
+    // Nothing is written back. The method is `declared-synchronized`, so its monitor is taken by
+    // the caller and released by the runtime; emitting the lock pair here would take a monitor the
+    // frame does not own and release one it never took, which the runtime reports as a destroyed
+    // mutex. A bare return is all this needs to be - the write path becomes unreachable.
     storageClass.methods
         .filter { it.name == "d" && it.parameterTypes.size == 2 }
         .forEach { save ->
             save.replaceInstructions(
                 0,
-                listOf(
-                    BuilderInstruction11x(Opcode.MONITOR_ENTER, 0),
-                    BuilderInstruction11x(Opcode.MONITOR_EXIT, 0),
-                    BuilderInstruction10x(Opcode.RETURN_VOID),
-                ),
+                listOf(BuilderInstruction10x(Opcode.RETURN_VOID)),
             )
         }
 
