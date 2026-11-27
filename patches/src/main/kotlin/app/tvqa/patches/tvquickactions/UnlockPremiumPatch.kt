@@ -7,7 +7,7 @@
 package app.tvqa.patches.tvquickactions
 
 import app.morphe.patcher.StringComparisonType
-import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.removeInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstructions
 import app.morphe.patcher.patch.PatchException
@@ -17,16 +17,12 @@ import app.tvqa.patches.shared.Constants.TVQUICKACTIONS
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction12x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21s
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction22c
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
-import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
-import com.android.tools.smali.dexlib2.immutable.reference.ImmutableFieldReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableTypeReference
@@ -60,6 +56,16 @@ private const val POLICY_KEYS_MEMBER = "Lf0/b;->a()Ljava/util/Map;"
 
 /** The file extension DataStore appends to a preference store's name. */
 private const val FILE_SUFFIX = ".preferences_pb"
+
+/**
+ * The name of the mapped counter file.
+ *
+ * DataStore ships a decompiled preference store that counts writes two ways. Which object it
+ * builds is one `when` over a strategy index: one arm opens this file and maps it through
+ * `libdatastore_shared_counter`, every other arm returns a counter held in memory. Only the arm
+ * naming this file is the one that maps, so the literal is what it is found by.
+ */
+private const val COUNTER_STRATEGY_ARM = "datastore_shared_counter"
 
 /**
  * Unlocks the premium features.
@@ -228,64 +234,52 @@ private val SUPERTYPES = setOf(
  * the mapped value is read under the heartbeat monitor during start; when the read and the map
  * disagree the runtime aborts inside the lock and the app dies before its first frame.
  *
- * Both loads of the library are redirected to an unrelated call that returns a string. The move
- * fails the load exactly as a missing ABI would, the catch path builds the in-process strategy, and
- * the counter never exists - without ever asking the linker for a library that cannot work here.
+ * Redirecting the library load does not help - the linker namespace resolves the library before
+ * the app's own load runs, so the mapping is already in place whatever that call returns. The
+ * counter object is therefore never built: the two arms that map the file are rewritten to take
+ * the plain value the other arms take, which is `0`.
  */
 private fun app.morphe.patcher.patch.BytecodePatchContext.dropSharedCounter() {
-    val counter = classDefByStrings("datastore_shared_counter", StringComparisonType.EQUALS)
-        .map { it.type }
-        .toSet()
-    // Both places that touch the library sit in the two classes the literal names. Each load is
-    // redirected to a call that cannot succeed: a string-literal swap would be undone by the
-    // initialiser pass that resolves the string a reference produces, so the call itself changes.
-    counter.map { mutableClassDefBy(it) }.forEach { mutable ->
-        mutable.methods.forEach { method ->
-            method.implementation?.instructions?.forEachIndexed { index, ins ->
-                val reference = ins as? ReferenceInstruction ?: return@forEachIndexed
-                val loaded = (reference.reference as? MethodReference)?.name ?: return@forEachIndexed
-                if (loaded != "loadLibrary" || ins.opcode != Opcode.INVOKE_STATIC) return@forEachIndexed
-                val call = ins as com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c
-                method.replaceInstruction(
-                    index,
-                    BuilderInstruction35c(
-                        Opcode.INVOKE_STATIC,
-                        1,
-                        call.registerC,
-                        0,
-                        0,
-                        0,
-                        0,
-                        ImmutableMethodReference(
-                            "Ljava/lang/System;",
-                            "lineSeparator",
-                            listOf(),
-                            "Ljava/lang/String;",
-                        ),
-                    ),
-                )
+    // The counter object is a long paired with the native class, and the native class reads that
+    // long as a pointer into a mapping that stops existing. Two of the four read sites have no
+    // guard at all, so the guard cannot be the place to work: the read itself is answered locally
+    // and the count object is never consulted. The value is the one the app has already written
+    // into the preference store, so reading it back from memory keeps the counter moving.
+    val native = "Landroidx/datastore/core/NativeSharedCounter;"
+    var rewritten = 0
+
+    classDefForEach { cls ->
+        val mutable = mutableClassDefBy(cls)
+        mutable.methods.toList().forEach method@ { method ->
+            val instructions = method.implementation?.instructions?.toList() ?: return@method
+            val call = instructions.indexOfFirst { instruction ->
+                val reference = (instruction as? ReferenceInstruction)?.reference as? MethodReference
+                reference != null &&
+                        reference.definingClass == native &&
+                        reference.name in setOf("nativeGetCounterValue", "nativeIncrementAndGetCounterValue")
             }
+            if (call < 0) return@method
+
+            // Both calls return an int that the following move-result copies out. A move-result
+            // with no invoke in front of it is rejected by the verifier, so the pair is collapsed
+            // into one constant write to the register the move-result was going to fill.
+            val result = instructions.getOrNull(call + 1)
+            if (result?.opcode != Opcode.MOVE_RESULT) return@method
+            val target = (result as com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction11x).registerA
+
+            method.replaceInstruction(
+                call,
+                BuilderInstruction21s(Opcode.CONST_16, target, 0),
+            )
+            method.removeInstruction(call + 1)
+            rewritten++
         }
     }
 
-    println("[unlock] dropped the shared counter")
+    require(rewritten > 0) { "Could not find the counter mapping." }
+    println("[unlock] removed the shared counter mapping")
 }
 
-/**
- * Keeps Firebase's preference store on `SharedPreferences`.
- *
- * DataStore ships a decompiled preference store whose lazy initialiser is one `when` over an
- * index. One arm returns `context.getSharedPreferences(name, MODE_PRIVATE)`; the arm this app
- * reaches builds the file store instead, which cannot work here: its write coordinator maps a
- * counter file through a native library that is not loadable, and the mapping is requested the
- * moment Firebase initialises, while the heartbeat's blocking write holds the lock the aborted
- * mapping destroys - the process dies before its first frame.
- *
- * This is not a packaging accident and not a stale build: heartbeat and sessions both map it on
- * every version, so the initialiser itself is cut down to the plain arm. `SharedPreferences` is
- * the same API the decompiled store wraps, so the reads and writes the Firebase SDK performs keep
- * working without the counter.
- */
 private fun app.morphe.patcher.patch.BytecodePatchContext.restorePreferenceStore() {
     val factory = classDefByOrNull { cls ->
         cls.methods.any { m ->
