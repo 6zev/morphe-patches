@@ -7,19 +7,25 @@
 package app.tvqa.patches.tvquickactions
 
 import app.morphe.patcher.StringComparisonType
+import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
+import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import app.morphe.patcher.util.returnEarly
 import app.tvqa.patches.shared.Constants.TVQUICKACTIONS
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21s
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableTypeReference
 
 /**
  * Store the bundled Google LVL policy reads its state from.
@@ -69,6 +75,8 @@ val unlockPremiumPatch = bytecodePatch(
     execute {
         forceLicenceGranted()
         skipLicenceServerCheck()
+        dropSharedCounter()
+        disableHeartbeat()
     }
 }
 
@@ -177,6 +185,148 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.licenceCheckerClasses(
 }
 
 private fun app.morphe.patcher.patch.BytecodePatchContext.isLicenceCallback(type: String): Boolean =
-    runCatching {
-        classDefBy(type).methods.any { it.parameters.size == 1 && it.name == "c" }
-    }.getOrDefault(false)
+    !SUPERTYPES.contains(type) &&
+            runCatching {
+                classDefBy(type).methods.any { it.parameters.size == 1 && it.name == "c" }
+            }.getOrDefault(false)
+
+/**
+ * Types a callback test must never match.
+ *
+ * The checkout test is deliberately loose: any class whose `c(I)` takes one argument. Framework
+ * base classes satisfy it too, and arming an `invoke-interface` against `Activity` is both wrong
+ * and enough for the bundle writer to drop the dex. They are listed once and excluded by name.
+ */
+private val SUPERTYPES = setOf(
+    "Landroid/app/Activity;",
+    "Landroid/content/Context;",
+    "Ljava/lang/Object;",
+    "Ljava/lang/Enum;",
+    "Ljava/lang/Throwable;",
+    "Lkotlin/coroutines/Continuation;",
+    "Lk4/i;",
+    "Ll4/i;",
+    "Ls4/p;",
+    "Lt4/p;",
+    "Lt4/a;",
+)
+/**
+ * Keeps the app off the DataStore shared counter.
+ *
+ * The counter is the multi-process coordinator DataStore picks when more than one process may
+ * touch the preferences file. It maps the count file through `libdatastore_shared_counter`, and
+ * the mapped value is read under the heartbeat monitor during start; when the read and the map
+ * disagree the runtime aborts inside the lock and the app dies before its first frame.
+ *
+ * Both loads of the library are redirected to an unrelated call that returns a string. The move
+ * fails the load exactly as a missing ABI would, the catch path builds the in-process strategy, and
+ * the counter never exists - without ever asking the linker for a library that cannot work here.
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.dropSharedCounter() {
+    val counter = classDefByStrings("datastore_shared_counter", StringComparisonType.EQUALS)
+        .map { it.type }
+        .toSet()
+    // Both places that touch the library sit in the two classes the literal names. The loads are
+    // redirected to a harmless alias: a string-literal swap would be undone by the initialiser pass
+    // that resolves the string a reference produces, so the call itself has to change.
+    counter.map { mutableClassDefBy(it) }.forEach { mutable ->
+        mutable.methods.forEach { method ->
+            method.implementation?.instructions?.forEachIndexed { index, ins ->
+                val reference = ins as? ReferenceInstruction ?: return@forEachIndexed
+                val loaded = (reference.reference as? MethodReference)?.name ?: return@forEachIndexed
+                if (loaded != "loadLibrary" || ins.opcode != Opcode.INVOKE_STATIC) return@forEachIndexed
+                val call = ins as com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c
+                method.replaceInstruction(
+                    index,
+                    BuilderInstruction35c(
+                        Opcode.INVOKE_STATIC,
+                        1,
+                        call.registerC,
+                        0,
+                        0,
+                        0,
+                        0,
+                        ImmutableMethodReference(
+                            "Ljava/lang/System;",
+                            "lineSeparator",
+                            listOf(),
+                            "Ljava/lang/String;",
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    println("[unlock] dropped the shared counter")
+}
+
+/**
+ * Keeps Firebase's session heartbeat away from DataStore at start.
+ *
+ * The heartbeat controller is built while Firebase initialises and immediately fetches the stored
+ * heartbeat list - a blocking read that runs with the controller's own lock held. The app never
+ * uses heartbeat, so the list read is answered with an empty list and the write-back is skipped,
+ * which also keeps the shared counter out of reach.
+ *
+ * The storage class is found by the preference keys it seeds, which are Firebase's own and survive
+ * renaming; its list method is the only one returning `ArrayList`.
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.disableHeartbeat() {
+    val keys = HEARTBEAT_KEYS.map { key ->
+        classDefByStrings(key, StringComparisonType.EQUALS).map { it.type }.toSet()
+    }
+    val storage = classDefByOrNull { cls ->
+        keys.all { it.contains(cls.type) } &&
+                cls.methods.any { it.returnType.toString() == "Ljava/util/ArrayList;" }
+    } ?: throw PatchException("Could not find the Firebase heartbeat storage.")
+
+    val storageClass = mutableClassDefBy(storage.type)
+    val list = storageClass.methods.first { it.returnType.toString() == "Ljava/util/ArrayList;" }
+
+    list.replaceInstructions(
+        0,
+        listOf(
+            BuilderInstruction21c(
+                Opcode.NEW_INSTANCE,
+                0,
+                ImmutableTypeReference("Ljava/util/ArrayList;"),
+            ),
+            BuilderInstruction35c(
+                Opcode.INVOKE_DIRECT,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                ImmutableMethodReference("Ljava/util/ArrayList;", "<init>", listOf(), "V"),
+            ),
+            BuilderInstruction11x(Opcode.RETURN_OBJECT, 0),
+        ),
+    )
+
+    // Nothing is written back: the body is replaced by the lock/unlock pair the verifier expects
+    // from a `synchronized` method, and the write path is left as dead code.
+    storageClass.methods
+        .filter { it.name == "d" && it.parameterTypes.size == 2 }
+        .forEach { save ->
+            save.replaceInstructions(
+                0,
+                listOf(
+                    BuilderInstruction11x(Opcode.MONITOR_ENTER, 0),
+                    BuilderInstruction11x(Opcode.MONITOR_EXIT, 0),
+                    BuilderInstruction10x(Opcode.RETURN_VOID),
+                ),
+            )
+        }
+
+    println("[unlock] disabled the heartbeat in ${storage.type}")
+}
+
+/** The preference keys Firebase's heartbeat storage seeds on first use. */
+private val HEARTBEAT_KEYS = listOf(
+    "fire-global",
+    "fire-count",
+    "last-used-date",
+)
