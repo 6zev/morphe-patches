@@ -12,7 +12,6 @@ import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import app.morphe.patcher.util.returnEarly
 import app.tvqa.patches.shared.Constants.TVQUICKACTIONS
 import com.android.tools.smali.dexlib2.Opcode
@@ -226,9 +225,9 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.dropSharedCounter() {
     val counter = classDefByStrings("datastore_shared_counter", StringComparisonType.EQUALS)
         .map { it.type }
         .toSet()
-    // Both places that touch the library sit in the two classes the literal names. The loads are
-    // redirected to a harmless alias: a string-literal swap would be undone by the initialiser pass
-    // that resolves the string a reference produces, so the call itself has to change.
+    // Both places that touch the library sit in the two classes the literal names. Each load is
+    // redirected to a call that cannot succeed: a string-literal swap would be undone by the
+    // initialiser pass that resolves the string a reference produces, so the call itself changes.
     counter.map { mutableClassDefBy(it) }.forEach { mutable ->
         mutable.methods.forEach { method ->
             method.implementation?.instructions?.forEachIndexed { index, ins ->
