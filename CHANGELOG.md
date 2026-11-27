@@ -1,3 +1,9 @@
+## [1.7.12](https://github.com/6zev/morphe-patches/compare/v1.7.11...v1.7.12) (2026-11-27)
+
+### 🐛 Bug Fixes
+
+* **patches:** stop emitting a monitor the heartbeat method never took ([e76e665](https://github.com/6zev/morphe-patches/commit/e76e665f9b6569b335866efb309ec8544b74e0bf))
+
 ## [1.7.11](https://github.com/6zev/morphe-patches/compare/v1.7.10...v1.7.11) (2026-11-27)
 
 ### 🐛 Bug Fixes
