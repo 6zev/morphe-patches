@@ -1,3 +1,9 @@
+## [1.7.11](https://github.com/6zev/morphe-patches/compare/v1.7.10...v1.7.11) (2026-11-27)
+
+### 🐛 Bug Fixes
+
+* **patches:** answer the DataStore counter from memory so the mapping never aborts ([c3aaf59](https://github.com/6zev/morphe-patches/commit/c3aaf5947edc9bf9714a619d83f08665d9b022c8))
+
 ## [1.7.10](https://github.com/6zev/morphe-patches/compare/v1.7.9...v1.7.10) (2026-11-27)
 
 ### 🐛 Bug Fixes
