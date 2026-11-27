@@ -1,3 +1,9 @@
+## [1.7.8](https://github.com/6zev/morphe-patches/compare/v1.7.7...v1.7.8) (2026-11-27)
+
+### 🐛 Bug Fixes
+
+* **patches:** find the licence checker by shape and keep patched classes in their own dex ([b5beb3c](https://github.com/6zev/morphe-patches/commit/b5beb3c660fbec615c1027fbcee89103ba9a74bb))
+
 ## [1.7.7](https://github.com/6zev/morphe-patches/compare/v1.7.6...v1.7.7) (2026-11-26)
 
 ### 🐛 Bug Fixes
