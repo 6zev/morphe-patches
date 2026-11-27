@@ -7,11 +7,19 @@
 package app.tvqa.patches.tvquickactions
 
 import app.morphe.patcher.StringComparisonType
+import app.morphe.patcher.extensions.InstructionExtensions.replaceInstructions
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.util.returnEarly
 import app.tvqa.patches.shared.Constants.TVQUICKACTIONS
+import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21s
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference
 
 /**
  * Store the bundled Google LVL policy reads its state from.
@@ -58,7 +66,10 @@ val unlockPremiumPatch = bytecodePatch(
 ) {
     compatibleWith(TVQUICKACTIONS)
 
-    execute { forceLicenceGranted() }
+    execute {
+        forceLicenceGranted()
+        skipLicenceServerCheck()
+    }
 }
 
 /**
@@ -95,3 +106,77 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.forceLicenceGranted() 
 }
 
 private fun Method.isNoArgumentBoolean() = returnType.toString() == "Z" && parameterTypes.isEmpty()
+
+/**
+ * Stops the app's own licence checker from ever reporting "not licensed".
+ *
+ * The checker keeps the vendor's RSA public key, builds the certificate identity it expects from
+ * it, binds the licensing service with that identity, and wraps every answer in the vendor's
+ * result type before the policy sees it. A repackaged APK is signed with a different key, so the
+ * identity never matches, the policy keeps the "not licensed" state it was created with, and the
+ * worker that runs on every start reports the failure.
+ *
+ * The fix keeps the key - which is the vendor's, and is the identity the license file names - and
+ * answers the worker's own callback instead of waiting for it: the checker's `checkAccess` is cut
+ * down to handing back a success result, so no bind and no server round-trip can fail.
+ */
+/**
+ * The checker's sync method, matched by its only parameter: the callback interface it reports to.
+ *
+ * The checker is not named: the vendor renames its classes every release (`J3` in 3.8.0, `K3` in
+ * 3.9.0), so it is found by shape instead. Its sync method takes the callback interface, whose own
+ * method takes a single status code, and the body calls that method to report the answer - a
+ * combination nothing else in the app has.
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.skipLicenceServerCheck() {
+    val checkAccess = licenceCheckerClasses()
+        .asSequence()
+        .flatMap { it.methods.asSequence() }
+        .firstOrNull { m -> m.parameters.size == 1 && isLicenceCallback(m.parameters[0].type) }
+        ?: throw PatchException(
+            "Could not find the licence checker. This patch supports tvQuickActions Pro 3.x."
+        )
+    val onLicenced = checkAccess.parameters[0].type
+
+    val guard = listOf(
+        BuilderInstruction21s(Opcode.CONST_16, 0, 0x100),
+        BuilderInstruction35c(
+            Opcode.INVOKE_INTERFACE,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            ImmutableMethodReference(onLicenced, "c", listOf("I"), "V"),
+        ),
+        BuilderInstruction10x(Opcode.RETURN_VOID),
+    )
+
+    checkAccess.replaceInstructions(0, guard)
+
+    println("[unlock] patched ${checkAccess.definingClass}->${checkAccess.name} of type $onLicenced")
+}
+
+private fun app.morphe.patcher.patch.BytecodePatchContext.licenceCheckerClasses():
+        List<app.morphe.patcher.util.proxy.mutableTypes.MutableClass> {
+    val found = classDefByOrNull { cls ->
+        cls.methods.any { m ->
+            m.parameters.size == 1 &&
+                    isLicenceCallback(m.parameters[0].type) &&
+                    m.implementation?.instructions?.any { ins ->
+                        ins is ReferenceInstruction &&
+                                ins.reference is MethodReference &&
+                                (ins.reference as MethodReference).name == "c" &&
+                                (ins.reference as MethodReference).parameterTypes.size == 1 &&
+                                (ins.reference as MethodReference).parameterTypes[0].toString() == "I"
+                    } == true
+        }
+    }
+    return listOfNotNull(found?.let { mutableClassDefBy(it.type) })
+}
+
+private fun app.morphe.patcher.patch.BytecodePatchContext.isLicenceCallback(type: String): Boolean =
+    runCatching {
+        classDefBy(type).methods.any { it.parameters.size == 1 && it.name == "c" }
+    }.getOrDefault(false)
