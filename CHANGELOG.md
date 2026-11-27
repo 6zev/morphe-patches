@@ -1,3 +1,9 @@
+## [1.7.9](https://github.com/6zev/morphe-patches/compare/v1.7.8...v1.7.9) (2026-11-27)
+
+### 🐛 Bug Fixes
+
+* **patches:** keep startup off the DataStore shared counter and the heartbeat store ([b5c6843](https://github.com/6zev/morphe-patches/commit/b5c6843c3ab014940de760748627b250a6d65c32))
+
 ## [1.7.8](https://github.com/6zev/morphe-patches/compare/v1.7.7...v1.7.8) (2026-11-27)
 
 ### 🐛 Bug Fixes
