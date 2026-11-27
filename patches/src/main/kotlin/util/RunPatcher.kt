@@ -57,12 +57,12 @@ fun main(args: Array<String>) {
 private fun createTempDir(): File = kotlin.io.path.createTempDirectory("morphe-run").toFile()
 
 /**
- * The dex writer mode, overridable with -Dmorphe.bytecodeMode=<NONE|FULL|STRIP_FAST|STRIP_SAFE>.
+ * The dex writer mode, overridable with -Dmorphe.bytecodeMode=<FULL|STRIP_FAST|STRIP_SAFE>.
  *
- * The default is FULL. The stripper modes move every class a patch touched into a separate dex
- * segment, which renumbers references the rest of the app still holds: tvQuickActions splits its
- * licensing classes across the main dex and the resource table, and the segment breaks both, so
- * the app aborts on start. A full rewrite keeps each class in the file it came from.
+ * The harness rewrites the dex in full by default. The stripper modes move every class a patch
+ * touched into a separate segment, which renumbers references the rest of the app still holds,
+ * and tvQuickActions aborts on start when they do; a full rewrite keeps each class in the file
+ * it came from. The override exists so a run can be compared against the stripper's output.
  */
 private fun rawBytecodeMode(): BytecodeMode =
     System.getProperty("morphe.bytecodeMode")
