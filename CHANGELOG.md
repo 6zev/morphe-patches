@@ -1,3 +1,9 @@
+## [1.7.10](https://github.com/6zev/morphe-patches/compare/v1.7.9...v1.7.10) (2026-11-27)
+
+### 🐛 Bug Fixes
+
+* **patches:** open the Firebase preference store under the store's own name ([65fb85d](https://github.com/6zev/morphe-patches/commit/65fb85d19d081056b395350550d7e46d050b641c))
+
 ## [1.7.9](https://github.com/6zev/morphe-patches/compare/v1.7.8...v1.7.9) (2026-11-27)
 
 ### 🐛 Bug Fixes
