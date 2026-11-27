@@ -17,13 +17,18 @@ import app.tvqa.patches.shared.Constants.TVQUICKACTIONS
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction12x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21s
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction22c
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableFieldReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableStringReference
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableTypeReference
 
 /**
@@ -50,6 +55,12 @@ private val POLICY_KEYS = listOf(
 /** The four-argument `Policy` interface method, whose parameters are the raw response parts. */
 private const val POLICY_INTERFACE = "Lcom/github/javiersantos/licensing/Policy;"
 
+/** The internal map of the preference model, which the policy's key reads go through. */
+private const val POLICY_KEYS_MEMBER = "Lf0/b;->a()Ljava/util/Map;"
+
+/** The file extension DataStore appends to a preference store's name. */
+private const val FILE_SUFFIX = ".preferences_pb"
+
 /**
  * Unlocks the premium features.
  *
@@ -75,6 +86,7 @@ val unlockPremiumPatch = bytecodePatch(
         forceLicenceGranted()
         skipLicenceServerCheck()
         dropSharedCounter()
+        restorePreferenceStore()
         disableHeartbeat()
     }
 }
@@ -88,30 +100,29 @@ val unlockPremiumPatch = bytecodePatch(
  * method taken, which is the one the premium flag is built from.
  */
 private fun app.morphe.patcher.patch.BytecodePatchContext.forceLicenceGranted() {
-    val readingKeys = POLICY_KEYS.map { key ->
+    val keywordClasses = POLICY_KEYS.map { key ->
         classDefByStrings(key, StringComparisonType.EQUALS).map { it.type }.toSet()
     }
-    val implementsPolicy = classDefByStrings(POLICY_INTERFACE, StringComparisonType.CONTAINS)
+    val stubs = classDefByStrings(POLICY_INTERFACE, StringComparisonType.CONTAINS)
         .map { it.type }
         .toSet()
 
-    val policyClass = classDefByStrings(POLICY_PREFERENCES, StringComparisonType.EQUALS)
+    val policy = classDefByStrings(POLICY_PREFERENCES, StringComparisonType.EQUALS)
         .firstOrNull { classDef ->
-            classDef.type !in implementsPolicy &&
-                    readingKeys.all { classDef.type in it } &&
+            classDef.type !in stubs &&
+                    keywordClasses.all { classDef.type in it } &&
                     classDef.methods.any { it.isNoArgumentBoolean() }
         }
         ?: throw PatchException(
             "Could not find the licence policy class. This patch supports tvQuickActions Pro 3.x."
         )
 
-    val policy = mutableClassDefBy(policyClass.type)
-    val allowAccess = policy.methods.firstOrNull { it.isNoArgumentBoolean() }
+    val policyClass = mutableClassDefBy(policy.type)
+    val allowAccess = policyClass.methods.firstOrNull { it.isNoArgumentBoolean() }
         ?: throw PatchException("Could not find the licence policy allowAccess() method")
 
     allowAccess.returnEarly(true)
 }
-
 private fun Method.isNoArgumentBoolean() = returnType.toString() == "Z" && parameterTypes.isEmpty()
 
 /**
@@ -259,6 +270,109 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.dropSharedCounter() {
 
     println("[unlock] dropped the shared counter")
 }
+
+/**
+ * Keeps Firebase's preference store on `SharedPreferences`.
+ *
+ * DataStore ships a decompiled preference store whose lazy initialiser is one `when` over an
+ * index. One arm returns `context.getSharedPreferences(name, MODE_PRIVATE)`; the arm this app
+ * reaches builds the file store instead, which cannot work here: its write coordinator maps a
+ * counter file through a native library that is not loadable, and the mapping is requested the
+ * moment Firebase initialises, while the heartbeat's blocking write holds the lock the aborted
+ * mapping destroys - the process dies before its first frame.
+ *
+ * This is not a packaging accident and not a stale build: heartbeat and sessions both map it on
+ * every version, so the initialiser itself is cut down to the plain arm. `SharedPreferences` is
+ * the same API the decompiled store wraps, so the reads and writes the Firebase SDK performs keep
+ * working without the counter.
+ */
+private fun app.morphe.patcher.patch.BytecodePatchContext.restorePreferenceStore() {
+    val factory = classDefByOrNull { cls ->
+        cls.methods.any { m ->
+            m.returnType.toString() == "Ljava/lang/Object;" &&
+                    m.implementation?.instructions?.any { ins ->
+                        ins is ReferenceInstruction &&
+                                (ins.reference as? MethodReference)?.name == "getSharedPreferences"
+                    } == true &&
+                    m.implementation?.instructions?.any { ins ->
+                        (ins as? ReferenceInstruction)?.reference?.toString() == FILE_SUFFIX
+                    } == true
+        }
+    } ?: throw PatchException("Could not find the preference store factory.")
+
+    val factoryClass = mutableClassDefBy(factory.type)
+    val initialiser = factoryClass.methods.first { m ->
+        m.returnType.toString() == "Ljava/lang/Object;" &&
+                m.implementation?.instructions?.any { ins ->
+                    ins is ReferenceInstruction &&
+                            (ins.reference as? MethodReference)?.name == "getSharedPreferences"
+                } == true
+    }
+
+    // The factory is a `when` over an index and its arms are numbered by the compiler, so no arm
+    // is named. Two of them are the preference store: the one that appends the store file's
+    // extension, and the one that opens the store. The store is opened under the plain name the
+    // file arm would have had, so it lives among the app's own preferences, and the file arm keeps
+    // that same plain name so the two cannot disagree.
+    val instructions = initialiser.implementation!!.instructions.toList()
+    val opensAt = instructions.indexOfFirst { ins ->
+        (ins as? ReferenceInstruction)?.let { (it.reference as? MethodReference)?.name } ==
+                "getSharedPreferences"
+    }
+    val suffixAt = instructions.indexOfFirst { ins ->
+        (ins as? ReferenceInstruction)?.reference?.toString() == FILE_SUFFIX
+    }
+
+    if (opensAt < 0 || suffixAt < 0) {
+        throw PatchException("Could not find the preference store arm.")
+    }
+
+    val suffix = instructions[suffixAt] as BuilderInstruction21c
+    val empty = BuilderInstruction21c(Opcode.CONST_STRING, suffix.registerA, ImmutableStringReference(""))
+
+    initialiser.replaceInstruction(suffix.location.index, empty)
+
+    // Two lines of the arm are rewritten, and nothing else in it moves: the store is opened by the
+    // arm's own context and store-name registers, with the name replaced by the literal the file
+    // arm now uses too, so the store lives among the app's own preferences.
+    val openCall = instructions[opensAt] as BuilderInstruction35c
+
+    val lastLiteralAt = instructions
+        .subList(0, opensAt)
+        .indexOfLast { it is BuilderInstruction21c }
+    val lastLiteral = instructions[lastLiteralAt] as BuilderInstruction21c
+
+    initialiser.replaceInstruction(
+        lastLiteral.location.index,
+        BuilderInstruction21c(
+            Opcode.CONST_STRING,
+            lastLiteral.registerA,
+            ImmutableStringReference(""),
+        ),
+    )
+
+    initialiser.replaceInstruction(
+        openCall.location.index,
+        BuilderInstruction35c(
+            Opcode.INVOKE_VIRTUAL,
+            2,
+            1,
+            2,
+            0,
+            0,
+            0,
+            ImmutableMethodReference(
+                "Landroid/content/Context;",
+                "getSharedPreferences",
+                listOf("Ljava/lang/String;", "I"),
+                "Landroid/content/SharedPreferences;",
+            ),
+        ),
+    )
+
+    println("[unlock] restored the preference store in ${factory.type}->${initialiser.name}")
+}
+
 
 /**
  * Keeps Firebase's session heartbeat away from DataStore at start.
