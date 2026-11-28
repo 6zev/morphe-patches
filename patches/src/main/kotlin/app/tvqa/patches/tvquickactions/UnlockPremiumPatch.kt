@@ -428,23 +428,45 @@ private fun app.morphe.patcher.patch.BytecodePatchContext.disableHeartbeat() {
  * has to match what the compiler would have emitted.
  */
 private fun emitSynchronizedBody(method: MutableMethod, work: String) {
-    val tail = if (method.returnType.toString() == "V") "return-void" else "return-object v0"
-    val smali = buildString {
-        appendLine("monitor-enter p0")
-        appendLine(":try_start")
-        if (work.isNotBlank()) appendLine(work.trimIndent())
-        appendLine(tail)
-        appendLine(":try_end")
-        appendLine(".catchall {:try_start .. :try_end} :catchall")
-        appendLine("monitor-exit p0")
-        appendLine(":catchall")
-        appendLine("throw p0")
-    }
     val implementation = method.implementation ?: throw PatchException("Expected a mutable implementation.")
+    val returnsObject = method.returnType.toString() != "V"
+
+    clearTryBlocks(implementation)
+
     while (implementation.getInstructions().isNotEmpty()) {
         implementation.removeInstruction(0)
     }
-    method.addInstructions(0, smali)
+
+    val tail = if (returnsObject) "return-object v0" else "return-void"
+    val body = buildString {
+        appendLine("monitor-enter p0")
+        if (work.isNotBlank()) appendLine(work.trimIndent())
+        appendLine(tail)
+    }
+    method.addInstructions(0, body)
+    val bodyEnd = implementation.getInstructions().size
+
+    method.addInstructions(bodyEnd, "monitor-exit p0")
+    val handlerEnd = implementation.getInstructions().size
+    method.addInstructions(handlerEnd, "throw p0")
+
+    implementation.addCatch(
+        implementation.newLabelForIndex(0),
+        implementation.newLabelForIndex(bodyEnd),
+        implementation.newLabelForIndex(bodyEnd),
+    )
+}
+
+private fun clearTryBlocks(implementation: MutableMethodImplementation) {
+    try {
+        val field = MutableMethodImplementation::class.java.getDeclaredField("tryBlocks")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val list = field.get(implementation) as MutableList<BuilderTryBlock>
+        list.clear()
+    } catch (e: Throwable) {
+        throw PatchException("Could not clear the stale try blocks: ${e.message}")
+    }
 }
 
 /** The preference keys Firebase's heartbeat storage seeds on first use. */
