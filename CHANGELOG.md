@@ -1,3 +1,9 @@
+## [1.7.14](https://github.com/6zev/morphe-patches/compare/v1.7.13...v1.7.14) (2026-11-28)
+
+### 🐛 Bug Fixes
+
+* **patches:** give the heartbeat catchall a real protected range ([a23642a](https://github.com/6zev/morphe-patches/commit/a23642aca8d900505306d1b20448431d0af34d19))
+
 ## [1.7.13](https://github.com/6zev/morphe-patches/compare/v1.7.12...v1.7.13) (2026-11-28)
 
 ### 🐛 Bug Fixes
