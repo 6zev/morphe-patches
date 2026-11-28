@@ -1,3 +1,9 @@
+## [1.7.15](https://github.com/6zev/morphe-patches/compare/v1.7.14...v1.7.15) (2026-11-28)
+
+### 🐛 Bug Fixes
+
+* **patches:** rethrow the caught exception, not p0, in the heartbeat catchall ([6608a71](https://github.com/6zev/morphe-patches/commit/6608a71c80f74688c41129f32028ede89d37a099))
+
 ## [1.7.14](https://github.com/6zev/morphe-patches/compare/v1.7.13...v1.7.14) (2026-11-28)
 
 ### 🐛 Bug Fixes
