@@ -447,13 +447,16 @@ private fun emitSynchronizedBody(method: MutableMethod, work: String) {
     val bodyEnd = implementation.getInstructions().size
 
     method.addInstructions(bodyEnd, "monitor-exit p0")
-    val handlerEnd = implementation.getInstructions().size
-    method.addInstructions(handlerEnd, "throw p0")
+    // The handler register is the exception object ART stores in the catchall, per JVM local
+    // slot 0 = the caught Throwable. Throw that, not p0 (which is `this`, i.e. the storage
+    // object - the verifier rejects `throw` on a class that is not a Throwable).
+    val rethrow = implementation.getInstructions().size
+    method.addInstructions(rethrow, "throw v0")
 
     implementation.addCatch(
         implementation.newLabelForIndex(0),
         implementation.newLabelForIndex(bodyEnd),
-        implementation.newLabelForIndex(bodyEnd),
+        implementation.newLabelForIndex(rethrow),
     )
 }
 
